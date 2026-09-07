@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chrono-Tether Online</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a1a2e; color: white; font-family: 'Segoe UI', sans-serif; user-select: none; }
+        #canvas-container { width: 100vw; height: 100vh; display: none; }
+        
+        /* 로비(Lobby) UI */
+        #lobby {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            z-index: 20;
+        }
+        .lobby-box {
+            background: rgba(0, 0, 0, 0.5); padding: 40px; border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; width: 350px;
+        }
+        h1 { margin-top: 0; color: #fff; text-shadow: 0 0 10px rgba(255,255,255,0.5); }
+        input {
+            width: 80%; padding: 10px; margin: 10px 0; border: none; border-radius: 5px;
+            font-size: 16px; text-align: center; font-weight: bold;
+        }
+        button {
+            width: 85%; padding: 12px; margin: 10px 0; border: none; border-radius: 5px;
+            font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s;
+        }
+        .btn-host { background-color: #ffa500; color: #000; }
+        .btn-host:hover { background-color: #ffb732; }
+        .btn-join { background-color: #00ffff; color: #000; }
+        .btn-join:hover { background-color: #33ffff; }
+        #status-msg { margin-top: 15px; font-size: 14px; color: #aaa; min-height: 20px; }
+
+        /* 게임 인게임 UI */
+        #ui { position: absolute; top: 20px; left: 20px; z-index: 10; pointer-events: none; display: none; }
+        .instruction { font-size: 14px; background: rgba(0, 0, 0, 0.6); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
+        .echo-text { color: #ffa500; font-weight: bold; }
+        .omen-text { color: #00ffff; font-weight: bold; }
+        .goal-text { color: #00ff00; font-weight: bold; }
+        .warning { color: #ff4444; font-weight: bold; display: none; margin-top: 10px; }
+        
+        /* 클리어 메세지 */
+        #clear-screen {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0, 0, 0, 0.8); z-index: 30;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+        }
+        #clear-screen h2 { font-size: 48px; color: #00ff00; text-shadow: 0 0 20px #00ff00; }
+    </style>
+    <!-- Three.js (3D 렌더링) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- PeerJS (서버 없는 P2P 멀티플레이어 통신) -->
+    <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
+</head>
+<body>
+
+    <!-- 1. 메인 로비 -->
+    <div id="lobby">
+        <div class="lobby-box">
+            <h1>Chrono-Tether</h1>
+            <p style="font-size: 13px; color: #ccc;">두 플레이어가 밧줄을 유지하며 목표(초록색)에 도달하세요.</p>
+            <hr style="border-color: #333; margin: 20px 0;">
+            
+            <button class="btn-host" onclick="hostGame()">방 만들기 (Host)</button>
+            <div id="host-id-display" style="margin: 10px 0; font-size: 20px; font-weight: bold; color: #ffa500; display: none;">
+                초대 코드: <span id="my-id">생성 중...</span>
+            </div>
+            
+            <p style="margin: 15px 0; color: #666;">- OR -</p>
+            
+            <input type="text" id="join-id-input" placeholder="초대 코드 입력" maxlength="6" autocomplete="off">
+            <button class="btn-join" onclick="joinGame()">방 참가 (Join)</button>
+            
+            <div id="status-msg"></div>
+        </div>
+    </div>
+
+    <!-- 2. 인게임 UI -->
+    <div id="ui">
+        <h2>Chrono-Tether</h2>
+        <div class="instruction">
+            나의 역할: <span id="role-display"></span><br>
+            이동: <b>W, A, S, D</b><br>
+            목표: 두 명 모두 <span class="goal-text">초록색 구역</span>에 도착<br>
+            <div id="tether-warning" class="warning">⚠️ 테더가 너무 늘어났습니다! 거리를 좁히세요!</div>
+        </div>
+    </div>
+
+    <!-- 3. 클리어 화면 -->
+    <div id="clear-screen">
+        <h2>STAGE CLEAR!</h2>
+        <p>두 차원의 결합이 완료되었습니다.</p>
+        <button onclick="location.reload()" style="width: 200px; margin-top: 20px;">메인으로</button>
+    </div>
+
+    <!-- 4. 게임 화면 -->
+    <div id="canvas-container"></div>
+
+    <script>
+        let peer = null;
+        let conn = null;
+        let isHost = false;
+        let gameStarted = false;
+        let myRole = ''; // 'P1' (Host) or 'P2' (Guest)
+        
+        // P1(과거)와 P2(미래)의 네트워크상 공유될 위치
+        const netData = {
+            p1: { x: -4, z: 12 },
+            p2: { x: 4, z: 12 }
+        };
+
+        const statusMsg = document.getElementById('status-msg');
+
+        function generateId() {
+            return Math.random().toString(36).substr(2, 6).toUpperCase();
+        }
+
+        // 방 만들기
+        function hostGame() {
+            const peerId = generateId();
+            peer = new Peer(peerId);
+            isHost = true;
+            myRole = 'P1';
+
+            peer.on('open', (id) => {
+                document.getElementById('host-id-display').style.display = 'block';
+                document.getElementById('my-id').innerText = id;
+                statusMsg.innerText = '친구의 접속을 기다리는 중...';
+            });
+
+            peer.on('connection', (connection) => {
+                conn = connection;
+                setupConnection();
+            });
+
+            peer.on('error', (err) => { statusMsg.innerText = '에러 발생: ' + err.type; });
+        }
+
+        // 방 참가하기
+        function joinGame() {
+            const joinId = document.getElementById('join-id-input').value.toUpperCase();
+            if (!joinId) { alert('코드를 입력하세요.'); return; }
+            
+            peer = new Peer();
+            isHost = false;
+            myRole = 'P2';
+            statusMsg.innerText = '접속 중...';
+
+            peer.on('open', (id) => {
+                conn = peer.connect(joinId);
+                setupConnection();
+            });
+
+            peer.on('error', (err) => { statusMsg.innerText = '방을 찾을 수 없습니다.'; });
+        }
+
+        // 연결 성사 시 게임 시작
+        function setupConnection() {
+            conn.on('open', () => {
+                document.getElementById('lobby').style.display = 'none';
+                document.getElementById('canvas-container').style.display = 'block';
+                document.getElementById('ui').style.display = 'block';
+                
+                const roleEl = document.getElementById('role-display');
+                if (isHost) {
+                    roleEl.innerHTML = '<span class="echo-text">과거 (Echo)</span>';
+                } else {
+                    roleEl.innerHTML = '<span class="omen-text">미래 (Omen)</span>';
+                }
+                
+                initGame(); // 3D 게임 환경 초기화
+            });
+
+            // 상대방 데이터 수신 처리
+            conn.on('data', (data) => {
+                if (data.type === 'move') {
+                    if (isHost) {
+                        netData.p2.x = data.x; netData.p2.z = data.z;
+                    } else {
+                        netData.p1.x = data.x; netData.p1.z = data.z;
+                    }
+                }
+            });
+        }
+
+        // 내 위치 정보를 상대에게 전송 (초당 30번)
+        setInterval(() => {
+            if (gameStarted && conn && conn.open) {
+                if (isHost) {
+                    conn.send({ type: 'move', x: localPlayer.position.x, z: localPlayer.position.z });
+                } else {
+                    conn.send({ type: 'move', x: localPlayer.position.x, z: localPlayer.position.z });
+                }
+            }
+        }, 1000 / 30);
+
+
+        let scene, camera, renderer;
+        let localPlayer, remotePlayer, tether;
+        let obstacles = [];
+        let goalBox1, goalBox2; // 클리어 조건 체크용 영역
+
+        const speed = 0.15;
+        const maxTetherLength = 12;
+
+        function initGame() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x1a1a2e, 10, 60);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 25, 20); // 탑다운에 가까운 뷰
+            camera.lookAt(0, 0, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            // 조명
+            scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(10, 30, 20);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+
+            // 맵 바닥
+            const gridHelper = new THREE.GridHelper(50, 50, 0x444444, 0x222222);
+            scene.add(gridHelper);
+            const planeGeo = new THREE.PlaneGeometry(50, 50);
+            const planeMat = new THREE.ShadowMaterial({ opacity: 0.5 });
+            const plane = new THREE.Mesh(planeGeo, planeMat);
+            plane.rotation.x = -Math.PI / 2;
+            plane.receiveShadow = true;
+            scene.add(plane);
+
+            // 장애물 생성 (가운데 거대한 기둥 - 밧줄 퍼즐 유도)
+            createObstacle(0, 1.5, 0, 8, 3, 4);  // 중앙 벽
+            createObstacle(-15, 1.5, 0, 4, 3, 20); // 좌측 외벽
+            createObstacle(15, 1.5, 0, 4, 3, 20);  // 우측 외벽
+
+            // 도착 지점 (Goal) 생성 - 초록색 영역
+            const goalGeo = new THREE.PlaneGeometry(12, 6);
+            const goalMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+            const goalArea = new THREE.Mesh(goalGeo, goalMat);
+            goalArea.rotation.x = -Math.PI / 2;
+            goalArea.position.set(0, 0.1, -15);
+            scene.add(goalArea);
+
+            // 클리어 판정을 위한 논리적 Box3 (도착 지점)
+            goalBox1 = new THREE.Box3().setFromObject(goalArea);
+
+            const p1Geo = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+            const p1Mat = new THREE.MeshPhongMaterial({ color: 0xffa500, emissive: 0x442200 }); // 과거 (주황)
+            const p2Geo = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+            const p2Mat = new THREE.MeshPhongMaterial({ color: 0x00ffff, emissive: 0x004444 }); // 미래 (파랑)
+
+            const p1 = new THREE.Mesh(p1Geo, p1Mat);
+            const p2 = new THREE.Mesh(p2Geo, p2Mat);
+            p1.castShadow = true; p2.castShadow = true;
+
+            p1.position.set(netData.p1.x, 0.75, netData.p1.z);
+            p2.position.set(netData.p2.x, 0.75, netData.p2.z);
+            scene.add(p1); scene.add(p2);
+
+            // 호스트 여부에 따라 나의 컨트롤 캐릭터 지정
+            if (isHost) {
+                localPlayer = p1; remotePlayer = p2;
+            } else {
+                localPlayer = p2; remotePlayer = p1;
+            }
+
+            // 테더(밧줄)
+            const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 3 });
+            const lineGeo = new THREE.BufferGeometry().setFromPoints([p1.position, p2.position]);
+            tether = new THREE.Line(lineGeo, lineMat);
+            scene.add(tether);
+
+            gameStarted = true;
+            animate();
+        }
+
+        // 장애물 생성 헬퍼 함수
+        function createObstacle(x, y, z, w, h, d) {
+            const geo = new THREE.BoxGeometry(w, h, d);
+            const mat = new THREE.MeshPhongMaterial({ color: 0x555566 });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, y, z);
+            mesh.castShadow = true; mesh.receiveShadow = true;
+            scene.add(mesh);
+            
+            // 충돌 체크를 위한 Bounding Box 추가
+            mesh.geometry.computeBoundingBox();
+            const box = new THREE.Box3();
+            box.setFromObject(mesh);
+            obstacles.push(box);
+        }
+
+        const keys = { w: false, a: false, s: false, d: false };
+        window.addEventListener('keydown', (e) => { const k = e.key.toLowerCase(); if(keys.hasOwnProperty(k)) keys[k] = true; });
+        window.addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); if(keys.hasOwnProperty(k)) keys[k] = false; });
+        window.addEventListener('resize', () => {
+            if(!camera) return;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        function animate() {
+            if (!gameStarted) return;
+            requestAnimationFrame(animate);
+
+            // 1. 내 캐릭터 이동 전 임시 위치 계산
+            let targetX = localPlayer.position.x;
+            let targetZ = localPlayer.position.z;
+
+            if (keys.w) targetZ -= speed;
+            if (keys.s) targetZ += speed;
+            if (keys.a) targetX -= speed;
+            if (keys.d) targetX += speed;
+
+            // 2. 장애물 충돌 검사 (가상 플레이어 Box를 만들어 벽과 겹치는지 확인)
+            const playerBox = new THREE.Box3().setFromCenterAndSize(
+                new THREE.Vector3(targetX, 0.75, targetZ), 
+                new THREE.Vector3(1.5, 1.5, 1.5)
+            );
+            
+            let collision = false;
+            for (let obs of obstacles) {
+                if (obs.intersectsBox(playerBox)) {
+                    collision = true;
+                    break;
+                }
+            }
+
+            // 3. 테더 길이 검사 (상대방 위치 기준)
+            const tempPos = new THREE.Vector3(targetX, 0.75, targetZ);
+            const dist = tempPos.distanceTo(remotePlayer.position);
+            const warningEl = document.getElementById('tether-warning');
+
+            if (dist > maxTetherLength) {
+                tether.material.color.setHex(0xff0000); // 멀어지면 줄이 빨간색
+                warningEl.style.display = 'block';
+                collision = true; // 너무 멀면 이동 불가 처리
+            } else {
+                tether.material.color.setHex(0xffffff);
+                warningEl.style.display = 'none';
+            }
+
+            // 4. 충돌도 없고 줄도 안끊어지면 이동 승인
+            if (!collision) {
+                localPlayer.position.x = targetX;
+                localPlayer.position.z = targetZ;
+            }
+
+            // 5. 원격 플레이어 위치 동기화 (네트워크 데이터 수신 기반 보간)
+            if (isHost) {
+                remotePlayer.position.lerp(new THREE.Vector3(netData.p2.x, 0.75, netData.p2.z), 0.3);
+            } else {
+                remotePlayer.position.lerp(new THREE.Vector3(netData.p1.x, 0.75, netData.p1.z), 0.3);
+            }
+
+            // 6. 테더 선 렌더링 업데이트
+            const posAttr = tether.geometry.attributes.position;
+            posAttr.setXYZ(0, localPlayer.position.x, localPlayer.position.y, localPlayer.position.z);
+            posAttr.setXYZ(1, remotePlayer.position.x, remotePlayer.position.y, remotePlayer.position.z);
+            posAttr.needsUpdate = true;
+
+            // 7. 카메라 추적 (두 플레이어의 중간 지점)
+            const midX = (localPlayer.position.x + remotePlayer.position.x) / 2;
+            const midZ = (localPlayer.position.z + remotePlayer.position.z) / 2;
+            camera.position.lerp(new THREE.Vector3(midX, 25, midZ + 15), 0.05);
+            camera.lookAt(midX, 0, midZ - 5);
+
+            // 8. 게임 클리어 (목표 지점 도달) 검사
+            checkClearCondition();
+
+            renderer.render(scene, camera);
+        }
+
+        function checkClearCondition() {
+            // 두 캐릭터의 중심점을 Box3로 변환
+            const p1Box = new THREE.Box3().setFromCenterAndSize(
+                new THREE.Vector3(localPlayer.position.x, 0.75, localPlayer.position.z), 
+                new THREE.Vector3(1, 1, 1)
+            );
+            const p2Box = new THREE.Box3().setFromCenterAndSize(
+                new THREE.Vector3(remotePlayer.position.x, 0.75, remotePlayer.position.z), 
+                new THREE.Vector3(1, 1, 1)
+            );
+
+            // 둘 다 Goal(초록색 영역) 안에 들어왔는지 검사
+            if (goalBox1.intersectsBox(p1Box) && goalBox1.intersectsBox(p2Box)) {
+                document.getElementById('clear-screen').style.display = 'flex';
+                document.getElementById('ui').style.display = 'none';
+                gameStarted = false; // 루프 정지
+            }
+        }
+    </script>
+</body>
+</html>
