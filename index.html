@@ -55,6 +55,11 @@
         .btn-host:hover { background-color: #ffbf69; transform: translateY(-2px); }
         .btn-join { background-color: #45a29e; color: #0b0c10; }
         .btn-join:hover { background-color: #66fcf1; transform: translateY(-2px); }
+        
+        .btn-quick { background: linear-gradient(90deg, #66fcf1, #2ec4b6); color: #0b0c10; font-size: 18px; padding: 18px; margin-bottom: 25px; box-shadow: 0 0 15px rgba(102, 252, 241, 0.4); animation: pulse 2s infinite; }
+        .btn-quick:hover { transform: scale(1.03); box-shadow: 0 0 25px rgba(102, 252, 241, 0.6); }
+        @keyframes pulse { 0% { box-shadow: 0 0 10px rgba(102,252,241,0.3); } 50% { box-shadow: 0 0 20px rgba(102,252,241,0.7); } 100% { box-shadow: 0 0 10px rgba(102,252,241,0.3); } }
+
         #status-msg { margin-top: 15px; font-size: 14px; color: #45a29e; min-height: 20px; font-weight: 600; }
 
         /* 게임 인게임 UI */
@@ -129,16 +134,18 @@
         <div class="lobby-box">
             <h1>CHRONO-TETHER</h1>
             <div class="subtitle">거대 점프 맵 멀티플레이어 협동 퍼즐</div>
+            
+            <button class="btn-quick" onclick="quickPlay()">🚀 빠른 시작 (자동 매치)</button>
+
             <hr style="border: 0; height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;">
             
+            <p style="margin: 0 0 10px 0; color: #c5c6c7; font-size: 14px; font-weight: bold;">[ 비공개 친구 방 ]</p>
             <button class="btn-host" onclick="hostGame()">방 만들기 (Host)</button>
             <div id="host-id-display" style="margin: 12px 0; font-size: 20px; font-weight: bold; color: #ff9f1c; display: none;">
                 초대 코드: <span id="my-id">생성 중...</span>
             </div>
             
-            <p style="margin: 15px 0; color: #45a29e; font-size: 13px;">— 또는 초대 코드로 참가 —</p>
-            
-            <input type="text" id="join-id-input" placeholder="6자리 코드 입력" maxlength="6" autocomplete="off">
+            <input type="text" id="join-id-input" placeholder="초대 코드 입력" maxlength="6" autocomplete="off">
             <button class="btn-join" onclick="joinGame()">방 참가 (Join)</button>
             
             <div id="status-msg"></div>
@@ -183,6 +190,9 @@
         let isCleared = false;
         let myRole = ''; 
 
+        // 퍼블릭 룸(자동 매칭)을 위한 상수
+        const MAX_PUBLIC_ROOMS = 15; // 검색할 최대 퍼블릭 방 개수
+
         // 네트워크 동기화용 플레이어 위치 & 조작 데이터
         const netData = {
             p1: { x: -3, y: 1, z: 0 },
@@ -197,8 +207,111 @@
             return Math.random().toString(36).substr(2, 6).toUpperCase();
         }
 
-        // 방 생성 (Host)
+        // --- 자동 매칭 (Quick Play) 로직 ---
+        function quickPlay() {
+            statusMsg.innerText = '공개 방을 찾고 있습니다...';
+            document.querySelector('.btn-quick').disabled = true;
+            
+            // 참가자용 임시 아이디로 Peer 접속
+            peer = new Peer(); 
+            peer.on('open', (id) => {
+                tryJoinPublicRoom(1);
+            });
+            peer.on('error', (err) => {
+                console.error('Peer 에러:', err);
+            });
+        }
+
+        // 1번부터 MAX_PUBLIC_ROOMS 까지 순차적으로 접속 시도
+        function tryJoinPublicRoom(roomIndex) {
+            if (roomIndex > MAX_PUBLIC_ROOMS) {
+                // 들어갈 수 있는 공개 방이 없음 -> 본인이 공개 방의 호스트가 됨
+                peer.destroy(); // 임시 접속기 파기
+                setTimeout(() => {
+                    statusMsg.innerText = '빈 방이 없어 새로운 방을 엽니다...';
+                    tryHostPublicRoom(1);
+                }, 500);
+                return;
+            }
+
+            statusMsg.innerText = `빈 방 검색 중... [${roomIndex}/${MAX_PUBLIC_ROOMS}]`;
+            const targetRoomId = `CHRONO-PUB-ROOM-${roomIndex}`;
+            let resolved = false;
+
+            const tempConn = peer.connect(targetRoomId, { reliable: true });
+
+            // 1.5초 내에 연결 안 되면 다음 방으로 패스
+            const timeoutTimer = setTimeout(() => {
+                if (!resolved) {
+                    resolved = true;
+                    tempConn.close();
+                    tryJoinPublicRoom(roomIndex + 1);
+                }
+            }, 1500);
+
+            tempConn.on('open', () => {
+                if (!resolved) {
+                    resolved = true;
+                    clearTimeout(timeoutTimer);
+                    // 매칭 성공! 게스트로 참여
+                    conn = tempConn;
+                    isHost = false;
+                    myRole = 'P2';
+                    setupConnection();
+                }
+            });
+
+            // 대상 방이 없거나 연결 실패 시
+            peer.once('error', (err) => {
+                if (err.type === 'peer-unavailable' && !resolved) {
+                    resolved = true;
+                    clearTimeout(timeoutTimer);
+                    tryJoinPublicRoom(roomIndex + 1);
+                }
+            });
+        }
+
+        // 1번부터 빈자리 방 번호를 찾아 호스트 열기 시도
+        function tryHostPublicRoom(roomIndex) {
+            if (roomIndex > MAX_PUBLIC_ROOMS) {
+                statusMsg.innerText = '현재 공개 서버가 가득 찼습니다. 나중에 다시 시도해주세요.';
+                document.querySelector('.btn-quick').disabled = false;
+                return;
+            }
+
+            const roomId = `CHRONO-PUB-ROOM-${roomIndex}`;
+            peer = new Peer(roomId);
+
+            peer.on('open', (id) => {
+                // 성공적으로 공개 방 점유
+                isHost = true;
+                myRole = 'P1';
+                document.getElementById('host-id-display').style.display = 'block';
+                document.getElementById('my-id').innerText = '[ 자동 매치 대기중 ]';
+                statusMsg.innerText = `상대방의 접속을 기다리는 중입니다...`;
+            });
+
+            peer.on('connection', (connection) => {
+                if (conn) { connection.close(); return; } // 이미 차있으면 거부
+                conn = connection;
+                setupConnection();
+            });
+
+            peer.on('error', (err) => {
+                if (err.type === 'unavailable-id') {
+                    // 이 방 번호는 누군가 쓰고 있으니 다음 번호 시도
+                    peer.destroy();
+                    tryHostPublicRoom(roomIndex + 1);
+                } else {
+                    statusMsg.innerText = '네트워크 오류: ' + err.type;
+                }
+            });
+        }
+        // --- 끝: 자동 매칭 로직 ---
+
+        // 방 생성 (Host) - 프라이빗
         function hostGame() {
+            if (peer) peer.destroy(); // 기존 연결 초기화
             const peerId = generateId();
             peer = new Peer(peerId);
             isHost = true;
@@ -217,12 +330,12 @@
 
             peer.on('error', (err) => { statusMsg.innerText = '네트워크 오류: ' + err.type; });
         }
-
-        // 방 참가 (Join)
+        // 방 참가 (Join) - 프라이빗
         function joinGame() {
             const joinId = document.getElementById('join-id-input').value.trim().toUpperCase();
             if (!joinId) { statusMsg.innerText = '코드를 입력해주세요.'; return; }
             
+            if (peer) peer.destroy();
             peer = new Peer();
             isHost = false;
             myRole = 'P2';
