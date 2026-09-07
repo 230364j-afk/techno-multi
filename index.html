@@ -179,13 +179,20 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // 전역 Firebase 초기화
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'chrono-tether-game';
         let db = null;
         let auth = null;
+
+        // 일반 스크립트 영역에서 사용할 수 있도록 Firebase 함수들을 window 전역 객체에 등록
+        window.collection = collection;
+        window.doc = doc;
+        window.setDoc = setDoc;
+        window.deleteDoc = deleteDoc;
+        window.onSnapshot = onSnapshot;
 
         if (typeof __firebase_config !== 'undefined') {
             try {
@@ -194,20 +201,30 @@
                 auth = getAuth(app);
                 db = getFirestore(app);
                 
+                window.db = db;
+                window.appId = appId;
+                window.auth = auth;
+
+                // 인증이 완료된 후에 방 목록을 불러오기 시작합니다.
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        window.initRoomListing();
+                    }
+                });
+
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
                     await signInAnonymously(auth);
                 }
             } catch (e) {
-                console.warn("Firebase 초기화 경고:", e);
+                console.warn("Firebase 초기화 에러 (로컬 모드로 전환):", e);
+                window.initRoomListing();
             }
+        } else {
+            // 환경 변수가 없을 때 (단순 로컬 HTML 실행 시)
+            window.initRoomListing();
         }
-
-        window.db = db;
-        window.appId = appId;
-        window.auth = auth;
-        window.initRoomListing();
     </script>
 </head>
 <body>
@@ -294,7 +311,7 @@
             const listContainer = document.getElementById('room-list-content');
             const countBadge = document.getElementById('room-count-badge');
 
-            if (!window.db) {
+            if (!window.db || !window.auth || !window.auth.currentUser) {
                 countBadge.innerText = '로컬 모드';
                 listContainer.innerHTML = '<div class="empty-rooms">직접 코드를 생성하거나 입력하여 참가하세요.</div>';
                 return;
@@ -304,8 +321,8 @@
 
             window.onSnapshot(roomsCol, (snapshot) => {
                 const activeRooms = [];
-                snapshot.forEach((doc) => {
-                    const data = doc.data();
+                snapshot.forEach((documentSnapshot) => {
+                    const data = documentSnapshot.data();
                     if (data && data.roomId) {
                         activeRooms.push(data);
                     }
@@ -334,16 +351,17 @@
         };
 
         function escapeHtml(str) {
-            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&quot;");
         }
 
         // 방 등록 (Firestore)
         async function registerRoomInFirestore(roomId) {
-            if (!window.db) return;
+            if (!window.db || !window.auth || !window.auth.currentUser) return;
             try {
                 const roomDoc = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'rooms', roomId);
                 await window.setDoc(roomDoc, {
                     roomId: roomId,
+                    hostId: window.auth.currentUser.uid,
                     title: `Chrono 방 #${roomId}`,
                     createdAt: Date.now()
                 });
@@ -354,7 +372,7 @@
 
         // 방 삭제 (Firestore)
         async function removeRoomFromFirestore(roomId) {
-            if (!window.db || !roomId) return;
+            if (!window.db || !roomId || !window.auth || !window.auth.currentUser) return;
             try {
                 const roomDoc = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'rooms', roomId);
                 await window.deleteDoc(roomDoc);
