@@ -41,6 +41,56 @@
             text-shadow: 0 0 12px rgba(102, 252, 241, 0.6); 
         }
         .subtitle { font-size: 13px; color: #c5c6c7; margin-bottom: 20px; }
+        
+        .room-browser {
+            background: rgba(11, 12, 16, 0.6);
+            border: 1px solid rgba(102, 252, 241, 0.2);
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 20px;
+            max-height: 180px;
+            overflow-y: auto;
+        }
+        .room-browser-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            font-weight: bold;
+            color: #66fcf1;
+            margin-bottom: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 6px;
+        }
+        .room-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(31, 40, 51, 0.8);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            transition: all 0.2s;
+        }
+        .room-item:hover {
+            border-color: #66fcf1;
+            background: rgba(31, 40, 51, 1);
+        }
+        .room-info { text-align: left; }
+        .room-title { font-size: 14px; font-weight: bold; color: #ffffff; }
+        .room-code { font-size: 11px; color: #ff9f1c; }
+        .btn-room-join {
+            width: auto;
+            padding: 6px 14px;
+            margin: 0;
+            font-size: 13px;
+            background: #45a29e;
+            color: #0b0c10;
+        }
+        .btn-room-join:hover { background: #66fcf1; }
+        .empty-rooms { font-size: 13px; color: #8892b0; padding: 15px 0; }
+
         input {
             width: 85%; padding: 12px; margin: 10px 0; border: 1px solid #45a29e; border-radius: 8px;
             font-size: 18px; text-align: center; font-weight: bold; background: #0b0c10; color: #66fcf1;
@@ -126,6 +176,39 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <!-- PeerJS (P2P Networking) -->
     <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 전역 Firebase 초기화
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'chrono-tether-game';
+        let db = null;
+        let auth = null;
+
+        if (typeof __firebase_config !== 'undefined') {
+            try {
+                const config = JSON.parse(__firebase_config);
+                const app = initializeApp(config);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (e) {
+                console.warn("Firebase 초기화 경고:", e);
+            }
+        }
+
+        window.db = db;
+        window.appId = appId;
+        window.auth = auth;
+        window.initRoomListing();
+    </script>
 </head>
 <body>
 
@@ -135,18 +218,27 @@
             <h1>CHRONO-TETHER</h1>
             <div class="subtitle">거대 점프 맵 멀티플레이어 협동 퍼즐</div>
             
-            <button class="btn-quick" onclick="quickPlay()">🚀 빠른 시작 (자동 매치)</button>
+            <!-- 실시간 공개 방 목록 -->
+            <div class="room-browser">
+                <div class="room-browser-header">
+                    <span>🌐 오픈된 게임 방 목록</span>
+                    <span id="room-count-badge" style="font-size: 11px; color: #ff9f1c;">불러오는 중...</span>
+                </div>
+                <div id="room-list-content">
+                    <div class="empty-rooms">열린 방을 찾아보고 있습니다...</div>
+                </div>
+            </div>
 
-            <hr style="border: 0; height: 1px; background: rgba(255,255,255,0.1); margin: 20px 0;">
-            
-            <p style="margin: 0 0 10px 0; color: #c5c6c7; font-size: 14px; font-weight: bold;">[ 비공개 친구 방 ]</p>
-            <button class="btn-host" onclick="hostGame()">방 만들기 (Host)</button>
-            <div id="host-id-display" style="margin: 12px 0; font-size: 20px; font-weight: bold; color: #ff9f1c; display: none;">
-                초대 코드: <span id="my-id">생성 중...</span>
+            <button class="btn-host" onclick="hostGame()">🎮 새로운 방 만들기 (Host)</button>
+            <div id="host-id-display" style="margin: 12px 0; font-size: 18px; font-weight: bold; color: #ff9f1c; display: none;">
+                내 방 코드: <span id="my-id">생성 중...</span>
             </div>
             
+            <hr style="border: 0; height: 1px; background: rgba(255,255,255,0.1); margin: 15px 0;">
+
+            <p style="margin: 0 0 5px 0; color: #c5c6c7; font-size: 13px; font-weight: bold;">[ 직접 코드 입력 접속 ]</p>
             <input type="text" id="join-id-input" placeholder="초대 코드 입력" maxlength="6" autocomplete="off">
-            <button class="btn-join" onclick="joinGame()">방 참가 (Join)</button>
+            <button class="btn-join" onclick="joinGame()">코드 입장 (Join)</button>
             
             <div id="status-msg"></div>
         </div>
@@ -189,17 +281,7 @@
         let gameStarted = false;
         let isCleared = false;
         let myRole = ''; 
-
-        // 퍼블릭 룸(자동 매칭)을 위한 상수
-        const MAX_PUBLIC_ROOMS = 15; // 검색할 최대 퍼블릭 방 개수
-
-        // 네트워크 동기화용 플레이어 위치 & 조작 데이터
-        const netData = {
-            p1: { x: -3, y: 1, z: 0 },
-            p2: { x: 3, y: 1, z: 0 },
-            tetherMax: 15.0,
-            cleared: false
-        };
+        let currentRoomId = null;
 
         const statusMsg = document.getElementById('status-msg');
 
@@ -207,112 +289,91 @@
             return Math.random().toString(36).substr(2, 6).toUpperCase();
         }
 
-        // --- 자동 매칭 (Quick Play) 로직 ---
-        function quickPlay() {
-            statusMsg.innerText = '공개 방을 찾고 있습니다...';
-            document.querySelector('.btn-quick').disabled = true;
-            
-            // 참가자용 임시 아이디로 Peer 접속
-            peer = new Peer(); 
-            peer.on('open', (id) => {
-                tryJoinPublicRoom(1);
-            });
-            peer.on('error', (err) => {
-                console.error('Peer 에러:', err);
-            });
-        }
+        // --- 실시간 방 목록 구독 및 관리 ---
+        window.initRoomListing = function() {
+            const listContainer = document.getElementById('room-list-content');
+            const countBadge = document.getElementById('room-count-badge');
 
-        // 1번부터 MAX_PUBLIC_ROOMS 까지 순차적으로 접속 시도
-        function tryJoinPublicRoom(roomIndex) {
-            if (roomIndex > MAX_PUBLIC_ROOMS) {
-                // 들어갈 수 있는 공개 방이 없음 -> 본인이 공개 방의 호스트가 됨
-                peer.destroy(); // 임시 접속기 파기
-                setTimeout(() => {
-                    statusMsg.innerText = '빈 방이 없어 새로운 방을 엽니다...';
-                    tryHostPublicRoom(1);
-                }, 500);
+            if (!window.db) {
+                countBadge.innerText = '로컬 모드';
+                listContainer.innerHTML = '<div class="empty-rooms">직접 코드를 생성하거나 입력하여 참가하세요.</div>';
                 return;
             }
 
-            statusMsg.innerText = `빈 방 검색 중... [${roomIndex}/${MAX_PUBLIC_ROOMS}]`;
-            const targetRoomId = `CHRONO-PUB-ROOM-${roomIndex}`;
-            let resolved = false;
+            const roomsCol = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'rooms');
 
-            const tempConn = peer.connect(targetRoomId, { reliable: true });
+            window.onSnapshot(roomsCol, (snapshot) => {
+                const activeRooms = [];
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    if (data && data.roomId) {
+                        activeRooms.push(data);
+                    }
+                });
 
-            // 1.5초 내에 연결 안 되면 다음 방으로 패스
-            const timeoutTimer = setTimeout(() => {
-                if (!resolved) {
-                    resolved = true;
-                    tempConn.close();
-                    tryJoinPublicRoom(roomIndex + 1);
+                countBadge.innerText = `${activeRooms.length}개 방 열림`;
+
+                if (activeRooms.length === 0) {
+                    listContainer.innerHTML = '<div class="empty-rooms">현재 개설된 방이 없습니다. 방을 만들어 보세요!</div>';
+                    return;
                 }
-            }, 1500);
 
-            tempConn.on('open', () => {
-                if (!resolved) {
-                    resolved = true;
-                    clearTimeout(timeoutTimer);
-                    // 매칭 성공! 게스트로 참여
-                    conn = tempConn;
-                    isHost = false;
-                    myRole = 'P2';
-                    setupConnection();
-                }
+                listContainer.innerHTML = activeRooms.map(r => `
+                    <div class="room-item">
+                        <div class="room-info">
+                            <div class="room-title">🏰 ${escapeHtml(r.title || '탐험가들의 방')}</div>
+                            <div class="room-code">코드: ${r.roomId}</div>
+                        </div>
+                        <button class="btn-room-join" onclick="joinRoomById('${r.roomId}')">입장하기</button>
+                    </div>
+                `).join('');
+            }, (error) => {
+                console.error("방 목록 구독 에러:", error);
+                countBadge.innerText = '오류 발생';
             });
+        };
 
-            // 대상 방이 없거나 연결 실패 시
-            peer.once('error', (err) => {
-                if (err.type === 'peer-unavailable' && !resolved) {
-                    resolved = true;
-                    clearTimeout(timeoutTimer);
-                    tryJoinPublicRoom(roomIndex + 1);
-                }
-            });
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
         }
 
-        // 1번부터 빈자리 방 번호를 찾아 호스트 열기 시도
-        function tryHostPublicRoom(roomIndex) {
-            if (roomIndex > MAX_PUBLIC_ROOMS) {
-                statusMsg.innerText = '현재 공개 서버가 가득 찼습니다. 나중에 다시 시도해주세요.';
-                document.querySelector('.btn-quick').disabled = false;
-                return;
+        // 방 등록 (Firestore)
+        async function registerRoomInFirestore(roomId) {
+            if (!window.db) return;
+            try {
+                const roomDoc = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'rooms', roomId);
+                await window.setDoc(roomDoc, {
+                    roomId: roomId,
+                    title: `Chrono 방 #${roomId}`,
+                    createdAt: Date.now()
+                });
+            } catch (e) {
+                console.error("방 등록 실패:", e);
             }
-
-            const roomId = `CHRONO-PUB-ROOM-${roomIndex}`;
-            peer = new Peer(roomId);
-
-            peer.on('open', (id) => {
-                // 성공적으로 공개 방 점유
-                isHost = true;
-                myRole = 'P1';
-                document.getElementById('host-id-display').style.display = 'block';
-                document.getElementById('my-id').innerText = '[ 자동 매치 대기중 ]';
-                statusMsg.innerText = `상대방의 접속을 기다리는 중입니다...`;
-            });
-
-            peer.on('connection', (connection) => {
-                if (conn) { connection.close(); return; } // 이미 차있으면 거부
-                conn = connection;
-                setupConnection();
-            });
-
-            peer.on('error', (err) => {
-                if (err.type === 'unavailable-id') {
-                    // 이 방 번호는 누군가 쓰고 있으니 다음 번호 시도
-                    peer.destroy();
-                    tryHostPublicRoom(roomIndex + 1);
-                } else {
-                    statusMsg.innerText = '네트워크 오류: ' + err.type;
-                }
-            });
         }
-        // --- 끝: 자동 매칭 로직 ---
 
-        // 방 생성 (Host) - 프라이빗
+        // 방 삭제 (Firestore)
+        async function removeRoomFromFirestore(roomId) {
+            if (!window.db || !roomId) return;
+            try {
+                const roomDoc = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'rooms', roomId);
+                await window.deleteDoc(roomDoc);
+            } catch (e) {
+                console.error("방 삭제 실패:", e);
+            }
+        }
+
+        // 특정 방 ID로 참가
+        function joinRoomById(targetRoomId) {
+            document.getElementById('join-id-input').value = targetRoomId;
+            joinGame();
+        }
+
+        // 방 생성 (Host) - 공개 방 등록
         function hostGame() {
-            if (peer) peer.destroy(); // 기존 연결 초기화
+            if (peer) peer.destroy(); 
             const peerId = generateId();
+            currentRoomId = peerId;
             peer = new Peer(peerId);
             isHost = true;
             myRole = 'P1';
@@ -320,17 +381,26 @@
             peer.on('open', (id) => {
                 document.getElementById('host-id-display').style.display = 'block';
                 document.getElementById('my-id').innerText = id;
-                statusMsg.innerText = '파트너의 접속을 기다리는 중...';
+                statusMsg.innerText = '방을 공개 등록했습니다. 다른 플레이어의 접속을 기다리는 중...';
+                
+                // 오픈된 방 목록에 공유 등록
+                registerRoomInFirestore(id);
             });
 
             peer.on('connection', (connection) => {
                 conn = connection;
+                // 플레이어가 들어오면 목록에서 방 제거
+                removeRoomFromFirestore(currentRoomId);
                 setupConnection();
             });
 
-            peer.on('error', (err) => { statusMsg.innerText = '네트워크 오류: ' + err.type; });
+            peer.on('error', (err) => { 
+                statusMsg.innerText = '네트워크 오류: ' + err.type; 
+                removeRoomFromFirestore(currentRoomId);
+            });
         }
-        // 방 참가 (Join) - 프라이빗
+
+        // 방 참가 (Join)
         function joinGame() {
             const joinId = document.getElementById('join-id-input').value.trim().toUpperCase();
             if (!joinId) { statusMsg.innerText = '코드를 입력해주세요.'; return; }
@@ -339,7 +409,7 @@
             peer = new Peer();
             isHost = false;
             myRole = 'P2';
-            statusMsg.innerText = '방 연결 중...';
+            statusMsg.innerText = `'${joinId}' 방에 연결 중...`;
 
             peer.on('open', (id) => {
                 conn = peer.connect(joinId);
@@ -349,9 +419,19 @@
             peer.on('error', (err) => { statusMsg.innerText = '방을 찾을 수 없거나 연결 실패.'; });
         }
 
+        // 창 닫을 때 방 목록에서 자동 제거
+        window.addEventListener('beforeunload', () => {
+            if (isHost && currentRoomId) {
+                removeRoomFromFirestore(currentRoomId);
+            }
+        });
+
         // P2P 연결 세팅
         function setupConnection() {
             conn.on('open', () => {
+                if (isHost && currentRoomId) {
+                    removeRoomFromFirestore(currentRoomId);
+                }
                 document.getElementById('lobby').style.display = 'none';
                 document.getElementById('canvas-container').style.display = 'block';
                 document.getElementById('ui').style.display = 'block';
