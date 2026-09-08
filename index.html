@@ -1,1031 +1,574 @@
-<!DOCTYPE html>
-<html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chrono-Tether Online - Giant Jump Parkour</title>
+    <title>Chrono-Tether Online</title>
+    
+    <!-- 구글 폰트 추가 (SF 느낌의 세련된 폰트) -->
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&display=swap" rel="stylesheet">
+    
     <style>
+        /* 기본 스타일 리셋 및 전역 설정 */
         * { box-sizing: border-box; }
         body { 
             margin: 0; 
             overflow: hidden; 
-            background-color: #0b0c10; 
-            color: #ffffff; 
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
-            user-select: none; 
+            background: radial-gradient(circle at center, #1b2735 0%, #090a0f 100%); 
+            color: #e0e0e0; 
+            font-family: 'Chakra Petch', sans-serif; 
+            user-select: none;
         }
-        #canvas-container { width: 100vw; height: 100vh; display: none; }
         
-        /* 로비 (Lobby) UI */
+        /* 캔버스 (게임 화면) */
+        #canvas-container { 
+            width: 100vw; 
+            height: 100vh; 
+            display: block;
+            position: absolute;
+            top: 0; left: 0;
+            z-index: 1;
+        }
+
+        /* 로비 컨테이너 (유리 질감 효과) */
         #lobby {
-            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            background: radial-gradient(circle at center, #1f2833 0%, #0b0c10 100%);
-            z-index: 50;
-        }
-        .lobby-box {
-            background: rgba(31, 40, 51, 0.85); 
-            padding: 40px; 
-            border-radius: 16px;
-            box-shadow: 0 15px 35px rgba(0,0,0,0.7), 0 0 20px rgba(102, 252, 241, 0.2); 
-            text-align: center; 
-            width: 420px;
-            border: 1px solid rgba(102, 252, 241, 0.3);
-            backdrop-filter: blur(10px);
-        }
-        h1 { 
-            margin: 0 0 10px 0; 
-            color: #66fcf1; 
-            font-size: 32px;
-            letter-spacing: 2px;
-            text-shadow: 0 0 12px rgba(102, 252, 241, 0.6); 
-        }
-        .subtitle { font-size: 13px; color: #c5c6c7; margin-bottom: 20px; }
-        
-        .room-browser {
-            background: rgba(11, 12, 16, 0.6);
-            border: 1px solid rgba(102, 252, 241, 0.2);
-            border-radius: 10px;
-            padding: 12px;
-            margin-bottom: 20px;
-            max-height: 180px;
-            overflow-y: auto;
-        }
-        .room-browser-header {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
             display: flex;
-            justify-content: space-between;
             align-items: center;
+            justify-content: center;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(8px);
+        }
+
+        .lobby-card {
+            background: rgba(20, 25, 40, 0.85);
+            border: 1px solid rgba(0, 255, 255, 0.2);
+            border-radius: 16px;
+            padding: 40px;
+            width: 450px;
+            max-width: 90%;
+            box-shadow: 0 10px 40px rgba(0, 255, 255, 0.1), inset 0 0 20px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            position: relative;
+        }
+
+        .version-badge {
+            position: absolute;
+            top: -15px;
+            right: 20px;
+            background: linear-gradient(90deg, #ff007a, #7a00ff);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
             font-size: 14px;
             font-weight: bold;
-            color: #66fcf1;
-            margin-bottom: 10px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-            padding-bottom: 6px;
+            box-shadow: 0 4px 10px rgba(255, 0, 122, 0.4);
         }
-        .room-item {
+
+        h1 {
+            margin: 0;
+            font-size: 36px;
+            text-align: center;
+            font-weight: 700;
+            background: linear-gradient(to right, #00ffff, #ffa500);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0px 4px 15px rgba(0, 255, 255, 0.3);
+            letter-spacing: 2px;
+        }
+
+        .subtitle { 
+            text-align: center; 
+            color: #a0aab5; 
+            font-size: 16px; 
+            margin-top: -10px;
+            margin-bottom: 10px;
+        }
+
+        /* 방 탐색기 UI */
+        .room-browser {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .room-browser-header {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 12px 15px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: rgba(31, 40, 51, 0.8);
-            border: 1px solid rgba(255,255,255,0.1);
+            font-weight: bold;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .btn-refresh {
+            background: transparent;
+            color: #00ffff;
+            border: 1px solid #00ffff;
             border-radius: 6px;
-            padding: 8px 12px;
-            margin-bottom: 6px;
+            padding: 4px 10px;
+            cursor: pointer;
+            font-size: 12px;
+            font-family: inherit;
             transition: all 0.2s;
         }
-        .room-item:hover {
-            border-color: #66fcf1;
-            background: rgba(31, 40, 51, 1);
+        .btn-refresh:hover {
+            background: #00ffff;
+            color: #000;
         }
-        .room-info { text-align: left; }
-        .room-title { font-size: 14px; font-weight: bold; color: #ffffff; }
-        .room-code { font-size: 11px; color: #ff9f1c; }
+
+        #room-list-container {
+            max-height: 180px;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        /* 스크롤바 디자인 */
+        #room-list-container::-webkit-scrollbar { width: 6px; }
+        #room-list-container::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+        #room-list-container::-webkit-scrollbar-thumb { background: #45a29e; border-radius: 3px; }
+
+        .room-item {
+            background: rgba(255, 255, 255, 0.03);
+            border-left: 3px solid #00ffff;
+            margin-bottom: 8px;
+            padding: 12px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+        .room-item:hover { background: rgba(255, 255, 255, 0.08); }
+        .room-info { display: flex; flex-direction: column; gap: 4px; }
+        .room-title { font-weight: bold; font-size: 15px; color: #fff; }
+        .room-code { font-size: 12px; color: #888; }
+
         .btn-room-join {
-            width: auto;
+            background: #00ffff;
+            color: #000;
+            border: none;
             padding: 6px 14px;
-            margin: 0;
-            font-size: 13px;
-            background: #45a29e;
-            color: #0b0c10;
-        }
-        .btn-room-join:hover { background: #66fcf1; }
-        .btn-refresh {
-            background: rgba(69, 162, 158, 0.2); border: 1px solid #45a29e; color: #66fcf1;
-            padding: 3px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; transition: all 0.2s;
-        }
-        .btn-refresh:hover { background: #45a29e; color: #0b0c10; }
-        .empty-rooms { font-size: 13px; color: #8892b0; padding: 15px 0; }
-
-        input {
-            width: 85%; padding: 12px; margin: 10px 0; border: 1px solid #45a29e; border-radius: 8px;
-            font-size: 18px; text-align: center; font-weight: bold; background: #0b0c10; color: #66fcf1;
-            outline: none;
-        }
-        input:focus { border-color: #66fcf1; box-shadow: 0 0 10px rgba(102,252,241,0.5); }
-        button {
-            width: 85%; padding: 14px; margin: 8px 0; border: none; border-radius: 8px;
-            font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s ease;
-        }
-        .btn-host { background-color: #ff9f1c; color: #0b0c10; }
-        .btn-host:hover { background-color: #ffbf69; transform: translateY(-2px); }
-        .btn-join { background-color: #45a29e; color: #0b0c10; }
-        .btn-join:hover { background-color: #66fcf1; transform: translateY(-2px); }
-        
-        .btn-quick { background: linear-gradient(90deg, #66fcf1, #2ec4b6); color: #0b0c10; font-size: 18px; padding: 18px; margin-bottom: 25px; box-shadow: 0 0 15px rgba(102, 252, 241, 0.4); animation: pulse 2s infinite; }
-        .btn-quick:hover { transform: scale(1.03); box-shadow: 0 0 25px rgba(102, 252, 241, 0.6); }
-        @keyframes pulse { 0% { box-shadow: 0 0 10px rgba(102,252,241,0.3); } 50% { box-shadow: 0 0 20px rgba(102,252,241,0.7); } 100% { box-shadow: 0 0 10px rgba(102,252,241,0.3); } }
-
-        #status-msg { margin-top: 15px; font-size: 14px; color: #45a29e; min-height: 20px; font-weight: 600; }
-
-        /* 게임 인게임 UI */
-        #ui { position: absolute; top: 20px; left: 20px; z-index: 20; pointer-events: none; display: none; }
-        .hud-panel { 
-            font-size: 14px; 
-            background: rgba(11, 12, 16, 0.85); 
-            padding: 18px; 
-            border-radius: 12px; 
-            border: 1px solid rgba(102, 252, 241, 0.3);
-            box-shadow: 0 8px 20px rgba(0,0,0,0.5);
-            min-width: 280px;
-        }
-        .hud-title { font-size: 18px; font-weight: bold; color: #66fcf1; margin-bottom: 8px; }
-        .echo-text { color: #ff9f1c; font-weight: bold; }
-        .omen-text { color: #00f0ff; font-weight: bold; }
-        .goal-text { color: #2ec4b6; font-weight: bold; }
-        .key-badge {
-            background: #1f2833; padding: 2px 7px; border-radius: 4px; border: 1px solid #45a29e;
-            color: #ffffff; font-weight: bold; font-size: 12px;
-        }
-        
-        /* 테더 길이지시기 */
-        .tether-bar-container {
-            margin-top: 12px;
-            background: rgba(255,255,255,0.1);
             border-radius: 6px;
-            height: 12px;
-            overflow: hidden;
-            border: 1px solid rgba(255,255,255,0.2);
-        }
-        .tether-bar {
-            height: 100%;
-            width: 50%;
-            background: linear-gradient(90deg, #45a29e, #66fcf1);
-            transition: width 0.1s linear, background-color 0.2s;
-        }
-        .tether-info {
-            display: flex; justify-content: space-between; font-size: 12px; margin-top: 4px; color: #c5c6c7;
-        }
-        .warning { color: #ff3366; font-weight: bold; display: none; margin-top: 10px; text-shadow: 0 0 8px #ff3366; }
-
-        /* 클리어 모달 메세지 */
-        #clear-screen {
-            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(11, 12, 16, 0.92); z-index: 100;
-            display: none; flex-direction: column; align-items: center; justify-content: center;
-            backdrop-filter: blur(8px);
-            animation: fadeIn 0.5s ease-out;
-        }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        #clear-screen h2 { 
-            font-size: 56px; color: #2ec4b6; text-shadow: 0 0 30px #2ec4b6; margin: 0 0 10px 0; 
-            letter-spacing: 4px;
-        }
-        #clear-screen p { font-size: 20px; color: #c5c6c7; margin-bottom: 30px; }
-        .btn-restart {
-            background: #2ec4b6; color: #0b0c10; padding: 14px 40px; font-size: 18px; font-weight: bold;
-            border-radius: 30px; border: none; cursor: pointer; box-shadow: 0 0 20px rgba(46, 196, 182, 0.6);
-        }
-        .btn-restart:hover { background: #66fcf1; transform: scale(1.05); }
-
-        /* 버전 표시 (Version Badge) */
-        #version-badge {
-            position: absolute;
-            top: 10px;
-            right: 15px;
-            font-size: 12px;
-            color: #8892b0;
             font-weight: bold;
-            z-index: 100;
+            cursor: pointer;
+            font-family: inherit;
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .btn-room-join:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0, 255, 255, 0.4);
+        }
+
+        .empty-rooms {
+            text-align: center;
+            color: #666;
+            padding: 20px 0;
+            font-size: 14px;
+        }
+
+        /* 메인 버튼들 */
+        button { font-family: inherit; }
+        .btn-quick {
+            background: linear-gradient(135deg, #00ffff, #0088ff);
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .btn-quick:hover {
+            box-shadow: 0 6px 20px rgba(0, 255, 255, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .section-divider {
+            display: flex;
+            align-items: center;
+            text-align: center;
+            color: #555;
+            font-size: 12px;
+        }
+        .section-divider::before, .section-divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid #333;
+        }
+        .section-divider:not(:empty)::before { margin-right: .5em; }
+        .section-divider:not(:empty)::after { margin-left: .5em; }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            color: #bbb;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 18px;
+            letter-spacing: 4px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input[type="text"]:focus { border-color: #00ffff; }
+
+        #status {
+            text-align: center;
+            font-size: 14px;
+            margin-top: 10px;
+            min-height: 20px;
+            font-weight: 600;
+        }
+
+        /* 인게임 HUD (헤드업 디스플레이) */
+        #ui {
+            position: absolute;
+            top: 20px; left: 20px;
+            z-index: 10;
             pointer-events: none;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.8);
         }
         
-        /* 추가된 복사 알림 UI */
-        #toast-msg {
-            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-            background: #2ec4b6; color: #0b0c10; padding: 10px 20px; border-radius: 8px;
-            font-weight: bold; font-size: 14px; opacity: 0; transition: opacity 0.3s;
-            z-index: 200; pointer-events: none;
+        .hud-panel {
+            background: rgba(10, 15, 25, 0.8);
+            border: 1px solid rgba(0, 255, 255, 0.2);
+            padding: 15px 20px;
+            border-radius: 12px;
+            backdrop-filter: blur(4px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            margin-bottom: 15px;
+        }
+
+        .hud-title {
+            margin: 0 0 10px 0;
+            font-size: 22px;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .instruction { font-size: 14px; line-height: 1.8; color: #ccc; }
+        .key-btn {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 12px;
+        }
+        
+        .echo-text { color: #ffa500; font-weight: bold; text-shadow: 0 0 5px rgba(255, 165, 0, 0.5); }
+        .omen-text { color: #00ffff; font-weight: bold; text-shadow: 0 0 5px rgba(0, 255, 255, 0.5); }
+
+        #tether-warning {
+            color: #ff3366;
+            font-weight: bold;
+            font-size: 16px;
+            display: none;
+            margin-top: 10px;
+            padding: 8px;
+            background: rgba(255, 51, 102, 0.1);
+            border-left: 4px solid #ff3366;
+            animation: pulse 1s infinite;
+        }
+
+        /* 클리어 화면 */
+        #clear-screen {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+        }
+        #clear-screen h1 {
+            font-size: 60px;
+            background: linear-gradient(to right, #00ff88, #00ffff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 30px rgba(0, 255, 136, 0.5);
+            margin-bottom: 20px;
+        }
+        #clear-screen p { font-size: 20px; color: #aaa; margin-bottom: 40px; }
+        #clear-screen button {
+            background: #00ff88;
+            color: #000;
+            border: none;
+            padding: 15px 40px;
+            font-size: 20px;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        #clear-screen button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(0, 255, 136, 0.4);
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
         }
     </style>
-    <!-- Three.js (3D Library) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
     <!-- PeerJS (P2P Networking) -->
     <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
+
+    <!-- Firebase 모듈 추가 (방 목록 동기화용) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, deleteDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        let app, auth, db, appId;
+        let isFirebaseReady = false;
+
+        try {
+            appId = typeof __app_id !== 'undefined' ? __app_id : 'chrono-tether-default';
+            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+            if (firebaseConfig) {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                isFirebaseReady = true;
+            }
+        } catch (e) {
+            console.warn("방 목록 서버 초기화 실패 - 네트워크 기능이 제한될 수 있습니다.", e);
+        }
+
+        async function authenticate() {
+            if (!isFirebaseReady) return false;
+            if (auth.currentUser) return true;
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                return true;
+            } catch (error) {
+                console.error("서버 인증 에러:", error);
+                return false;
+            }
+        }
+
+        // 글로벌 윈도우 객체에 방 등록 기능 추가
+        window.fbRegisterRoom = async function(peerId, roomName) {
+            if (!(await authenticate())) return;
+            try {
+                const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', peerId);
+                await setDoc(roomRef, {
+                    peerId: peerId,
+                    hostName: roomName || 'Chrono 파쿠르',
+                    status: 'waiting',
+                    createdAt: Date.now()
+                });
+            } catch (e) { console.error("방 등록 실패:", e); }
+        };
+
+        window.fbUnregisterRoom = async function(peerId) {
+            if (!(await authenticate())) return;
+            try {
+                const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', peerId);
+                await deleteDoc(roomRef);
+            } catch (e) { console.error("방 삭제 실패:", e); }
+        };
+
+        window.fbFetchRooms = async function() {
+            if (!(await authenticate())) return null;
+            try {
+                const roomsCol = collection(db, 'artifacts', appId, 'public', 'data', 'rooms');
+                const snapshot = await getDocs(roomsCol); 
+                const rooms = [];
+                const now = Date.now();
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    // 대기 중이며, 만들어진지 1시간이 지나지 않은 방만 표시
+                    if (data.status === 'waiting' && (now - data.createdAt) < 3600000) {
+                        rooms.push(data);
+                    }
+                });
+                return rooms;
+            } catch (e) { 
+                console.error("방 목록 로드 실패:", e); 
+                return null;
+            }
+        };
+    </script>
 </head>
 <body>
 
-    <!-- 0. 버전 표시 -->
-    <div id="version-badge">v.1.4 (P2P Link)</div>
-    <div id="toast-msg">클립보드에 복사되었습니다!</div>
-
-    <!-- 1. 메인 로비 UI -->
+    <!-- 1. 로비 UI (방 만들기 / 접속) -->
     <div id="lobby">
-        <div class="lobby-box">
-            <h1>CHRONO-TETHER</h1>
-            <div class="subtitle">거대 점프 맵 멀티플레이어 협동 퍼즐</div>
+        <div class="lobby-card">
+            <div class="version-badge">v.1.3</div>
+            <div>
+                <h1>CHRONO-TETHER</h1>
+                <div class="subtitle">협동 파쿠르 시뮬레이터</div>
+            </div>
             
-            <!-- 자동 매칭 버튼 -->
-            <button class="btn-quick" style="width: 100%; border-radius: 8px; font-weight: bold; border: none; cursor: pointer;" onclick="autoMatch()">🚀 빠른 매칭 (코드 없이 자동 참가)</button>
-
-            <!-- 친구와 하기 (수동 방 생성 및 입장) -->
-            <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.05);">
-                <div style="font-size: 13px; color: #66fcf1; margin-bottom: 10px; font-weight: bold;">[친구와 함께 하기]</div>
-                <button class="btn-host" style="width: 100%; margin: 0 0 10px 0; font-size: 14px; padding: 10px;" onclick="hostGame()">방 만들기 (코드 생성)</button>
-                <div style="display: flex; gap: 8px;">
-                    <input type="text" id="manual-room-code" placeholder="방 코드 (5자리)" style="width: 65%; margin: 0; padding: 10px; font-size: 14px; text-transform: uppercase;" maxlength="5">
-                    <button class="btn-join" style="width: 35%; margin: 0; padding: 10px; font-size: 14px;" onclick="joinManualRoom()">입장</button>
+            <!-- 방 탐색기 UI -->
+            <div class="room-browser">
+                <div class="room-browser-header">
+                    <span>🌐 탐색기 (공개 방 목록)</span>
+                    <button class="btn-refresh" onclick="refreshRoomBrowser()">새로고침</button>
+                </div>
+                <div id="room-list-container">
+                    <div class="empty-rooms">방 목록을 불러오는 중...</div>
                 </div>
             </div>
 
-            <button class="btn-room-join" style="background: transparent; border: 1px solid #45a29e; color: #45a29e; width: 100%; padding: 10px; font-size: 14px;" onclick="startSoloGame()">🏃‍♂️ 훈련장 (혼자 하기)</button>
+            <button class="btn-quick" onclick="createPublicRoom()">➕ 새로운 방 만들기</button>
+            
+            <div class="section-divider">OR</div>
 
-            <div id="host-id-display" style="margin: 15px 0; padding: 15px; background: rgba(0,0,0,0.5); border: 1px dashed #ff9f1c; border-radius: 8px; display: none;">
-                <div style="font-size: 13px; color: #c5c6c7; margin-bottom: 5px;">내 방 초대 코드</div>
-                <div style="font-size: 28px; font-weight: bold; color: #ff9f1c; letter-spacing: 3px;" id="my-id">생성 중...</div>
-                <button onclick="copyInviteLink()" style="background: transparent; border: 1px solid #ff9f1c; color: #ff9f1c; padding: 8px; font-size: 12px; margin-top: 10px; width: auto;">🔗 초대 링크 복사하기</button>
+            <!-- 친구와 하기 -->
+            <div>
+                <input type="text" id="join-id" placeholder="5자리 방 코드 입력" maxlength="5" style="text-transform: uppercase;">
+                <button class="btn-secondary" style="width: 100%; border: 1px solid #00ffff; color: #00ffff;" onclick="joinRoom()">🔗 코드로 입장하기</button>
             </div>
             
-            <div id="status-msg"></div>
+            <button class="btn-secondary" onclick="startSoloGame()">🏃 혼자 훈련장 들어가기</button>
+
+            <!-- 내 방 코드 표시 영역 -->
+            <div id="host-id-display" style="display:none; text-align: center; margin-top: 10px; background: rgba(0,255,255,0.1); padding: 15px; border-radius: 8px;">
+                <div style="font-size: 14px; color: #aaa; margin-bottom: 5px;">내 방 코드 (친구에게 알려주세요)</div>
+                <div id="my-id" style="font-size: 28px; font-weight: bold; color: #00ffff; letter-spacing: 5px;">---</div>
+            </div>
+
+            <div id="status"></div>
         </div>
     </div>
 
-    <!-- 2. 인게임 HUD UI -->
-    <div id="ui">
+    <!-- 2. 인게임 UI -->
+    <div id="ui" style="display: none;">
         <div class="hud-panel">
-            <div class="hud-title">CHRONO PARKOUR</div>
-            역할: <span id="role-display"></span><br>
-            이동: <span class="key-badge">W</span><span class="key-badge">A</span><span class="key-badge">S</span><span class="key-badge">D</span> | 점프: <span class="key-badge">SPACE</span><br>
-            테더 조절: <span class="key-badge">Q</span> (줄이기) / <span class="key-badge">E</span> (늘리기)<br>
-            목표: 두 명 모두 최상단 <span class="goal-text">골인 게이트</span>에 도착!
-            
-            <div class="tether-bar-container">
-                <div id="tether-bar" class="tether-bar"></div>
+            <h2 class="hud-title">Chrono-Tether</h2>
+            <div style="font-size: 16px; margin-bottom: 10px; color: #fff;">
+                당신의 역할: <span id="role-display" style="font-weight: bold;">---</span>
             </div>
-            <div class="tether-info">
-                <span>테더 길이: <b id="tether-len-val">10.0</b>m</span>
-                <span>한계치: <b id="tether-max-val">15.0</b>m</span>
+            <div class="instruction">
+                <span class="echo-text">과거 (주황)</span> 이동 : <span class="key-btn">W</span> <span class="key-btn">A</span> <span class="key-btn">S</span> <span class="key-btn">D</span><br>
+                <span class="omen-text">미래 (청록)</span> 이동 : <span class="key-btn">↑</span> <span class="key-btn">↓</span> <span class="key-btn">←</span> <span class="key-btn">→</span><br>
+                점프 : <span class="key-btn">Space</span><br>
+                밧줄 당기기 : <span class="key-btn">Q</span> | 밧줄 늘리기 : <span class="key-btn">E</span>
+                <div id="tether-warning">⚠️ 테더 길이 한계 도달!</div>
             </div>
-            <div id="tether-warning" class="warning">⚠️ 테더가 너무 늘어났습니다! 당겨지거나 끊어집니다!</div>
         </div>
     </div>
 
-    <!-- 3. 스테이지 클리어 축하 화면 -->
-    <div id="clear-screen">
-        <h2>SUMMIT REACHED!</h2>
-        <p>🎉 축하합니다! 거대 점프 맵을 완등하고 차원을 결합했습니다!</p>
-        <button class="btn-restart" onclick="location.reload()">다시 하기 / 메인으로</button>
+    <!-- 3. 클리어 화면 -->
+    <div id="clear-screen" style="display: none;">
+        <h1>SYNCHRONIZATION COMPLETE</h1>
+        <p>두 차원의 시공간이 성공적으로 복구되었습니다.</p>
+        <button onclick="location.reload()">로비로 돌아가기</button>
     </div>
 
-    <!-- 4. WebGL 렌더링 컨테이너 -->
-    <div id="canvas-container"></div>
+    <!-- 4. 3D 게임 화면 -->
+    <div id="canvas-container" style="display: none;"></div>
 
     <script>
-        let peer = null;
-        let conn = null;
-        let isHost = false;
-        let gameStarted = false;
-        let isCleared = false;
-        let myRole = ''; 
-        let currentRoomId = null;
-        let currentActiveRooms = [];
+        // --- 1. 전역 변수 및 게임 상태 ---
+        let peer;
+        let conn;
+            statusMsg.innerText = '공개 방을 서버에 등록하는 중...';
 
-        // 추가: 위치 동기화를 위한 전역 변수 (이 변수가 없어서 렌더링이 멈추고 검은 화면이 떴습니다)
-        let netData = { 
-            p1: { x: -4, y: 5, z: 0 }, 
-            p2: { x: 4, y: 5, z: 0 } 
-        };
-
-        const statusMsg = document.getElementById('status-msg');
-
-        // 페이지 로드 시 URL에 방 코드가 있으면 자동 접속 시도
-        window.onload = () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const roomCode = urlParams.get('room');
-            if (roomCode && roomCode.length === 5) {
-                document.getElementById('manual-room-code').value = roomCode;
-                joinRoomById(roomCode);
-            }
-        };
-
-        function generateId() {
-            // 방 코드가 겹치지 않도록 영문 대문자 + 숫자로 구성된 5자리 방 코드 생성 (헷갈리는 글자 O,0,I,1 제외)
-            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-            let result = '';
-            for (let i = 0; i < 5; i++) {
-                result += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            return result;
-        }
-
-        // 특정 방 ID로 즉시 참가
-        window.joinRoomById = function(targetRoomId) {
-            if (peer) peer.destroy();
-            
-            peer = new Peer(undefined, { config: peerConfig });
-            isHost = false;
-            myRole = 'P2';
-            statusMsg.style.color = "#ff9f1c";
-            statusMsg.innerText = `'${targetRoomId}' 방에 연결 중... 잠시만 기다려주세요.`;
-
-            peer.on('open', (id) => {
-                const tempConn = peer.connect(targetRoomId, { reliable: true });
+            peer.on('open', async (id) => {
+                statusMsg.innerText = '공개 방 개설 완료! 누군가 접속하기를 기다립니다...';
+                document.getElementById('host-id-display').style.display = 'block';
+                document.getElementById('my-id').innerText = id;
                 
-                // 만약 상대방이 꽉 차서 튕겨내거나 바로 닫히는 경우 처리
-                tempConn.on('close', () => {
-                    if (!gameStarted) {
-                        statusMsg.style.color = "#ff3366";
-                        statusMsg.innerText = '방이 꽉 찼거나 접근할 수 없습니다.';
-                        peer.destroy();
-                    }
-                });
+                // 클라우드 서버에 방 등록
+                if (window.fbRegisterRoom) {
+                    await window.fbRegisterRoom(id, `퍼블릭 룸 (${id.substring(4, 9)})`);
+                    refreshRoomBrowser(); // 방 목록 즉시 갱신
+                }
+                
+                // 창을 닫거나 방을 나갈 때 클라우드에서 방 삭제
+                window.addEventListener('beforeunload', cleanupPublicRoom);
+            });
 
-                tempConn.on('open', () => {
-                    // 호스트가 튕겨내지 않는지 짧게(0.25초) 확인 후 게임 진입
-                    setTimeout(() => {
-                        if (tempConn.open && !gameStarted) {
-                            conn = tempConn;
-                            setupConnection();
-                        }
-                    }, 250);
-                });
+            peer.on('connection', (connection) => {
+                if (conn && conn.open) {
+                    setTimeout(() => connection.close(), 100);
+                    return;
+                }
+                conn = connection;
+                
+                // 플레이어가 접속하면 목록에서 방을 지워 다른 사람이 못 들어오게 함
+                if (window.fbUnregisterRoom) {
+                    window.fbUnregisterRoom(currentRoomId);
+                }
+                setupConnection();
             });
 
             peer.on('error', (err) => { 
-                console.error("PeerJS 조인 에러:", err);
                 statusMsg.style.color = "#ff3366";
-                statusMsg.innerText = '방을 찾을 수 없습니다. 코드를 확인하거나 방장이 아직 방을 여는 중일 수 있습니다.'; 
+                statusMsg.innerText = '방 생성 실패. 네트워크 연결을 확인해주세요.';
             });
         };
 
-        // 수동 코드로 입장
-        window.joinManualRoom = function() {
-            const codeInput = document.getElementById('manual-room-code');
-            const code = codeInput.value.trim().toUpperCase();
-            if (code.length === 5) {
-                window.history.pushState({}, '', `?room=${code}`); // URL 업데이트
-                window.joinRoomById(code);
-            } else {
-                statusMsg.style.color = "#ff3366";
-                statusMsg.innerText = '올바른 5자리 코드를 입력해주세요.';
+        function cleanupPublicRoom() {
+            if (isHost && currentRoomId && window.fbUnregisterRoom) {
+                window.fbUnregisterRoom(currentRoomId);
             }
-        };
-
-        // 솔로 모드 시작
-        window.startSoloGame = function() {
-            if (peer) peer.destroy();
-            isHost = true;
-            myRole = 'Solo';
-            
-            document.getElementById('lobby').style.display = 'none';
-            document.getElementById('canvas-container').style.display = 'block';
-            document.getElementById('ui').style.display = 'block';
-            
-            const roleEl = document.getElementById('role-display');
-            roleEl.innerHTML = '<span class="echo-text">솔로 탐험가</span>';
-            
-            // UI 숨기기 (솔로 모드에서는 테더가 필요 없음)
-            document.querySelector('.tether-bar-container').style.display = 'none';
-            document.querySelector('.tether-info').style.display = 'none';
-            document.getElementById('tether-warning').style.display = 'none';
-
-            // 네트워크 오류 방지용 가짜 연결 객체 생성
-            conn = { send: () => {}, open: true };
-            
-            initGame();
-        };
-
-        // --- 자동 매칭 (빠른 참가) 로직 ---
-        const MAX_PUBLIC_ROOMS = 10;
-        
-        window.autoMatch = function() {
-            if (peer) peer.destroy();
-            document.getElementById('host-id-display').style.display = 'none';
-            statusMsg.style.color = "#66fcf1";
-            statusMsg.innerText = '빈 방을 찾거나 새로운 방을 생성하는 중...';
-            tryHostOrJoinPublic(1);
-        };
-
-        function tryHostOrJoinPublic(index) {
-            if (index > MAX_PUBLIC_ROOMS) {
-                statusMsg.style.color = "#ff3366";
-                statusMsg.innerText = '현재 모든 빠른 매칭 방이 가득 찼습니다. 잠시 후 시도해주세요.';
-                return;
-            }
-
-            const roomId = `CHRONO_PUB_${index}`;
-            const testPeer = new Peer(roomId, { config: peerConfig });
-
-            // 1. 내가 이 방의 호스트가 될 수 있는지 확인 (빈 방이면 내가 방장이 됨)
-            testPeer.on('open', (id) => {
-                peer = testPeer;
-                isHost = true;
-                myRole = 'P1';
-                currentRoomId = id;
-                
-                statusMsg.style.color = "#45a29e";
-                statusMsg.innerText = `[빠른 매칭] 방 생성 완료! 다른 플레이어를 기다리는 중...`;
-                
-                peer.on('connection', (connection) => {
-                    // 이미 게임에 참가자가 있다면 추가 접속 거부 (1:1 제한 유지)
-                    if (conn && conn.open) {
-                        setTimeout(() => connection.close(), 100);
-                        return;
-                    }
-                    conn = connection;
-                    setupConnection();
-                });
-            });
-
-            // 2. 누군가 이미 방을 만들었다면 에러 발생 -> 해당 방으로 참가(Join) 시도
-            testPeer.on('error', (err) => {
-                if (err.type === 'unavailable-id') {
-                    testPeer.destroy();
-                    joinPublicRoom(roomId, index);
-                } else {
-                    statusMsg.style.color = "#ff3366";
-                    statusMsg.innerText = '네트워크 오류가 발생했습니다. 다시 시도해주세요.';
-                }
-            });
         }
 
-        function joinPublicRoom(roomId, index) {
-            const joinPeer = new Peer(undefined, { config: peerConfig });
-            
-            joinPeer.on('open', () => {
-                const tempConn = joinPeer.connect(roomId, { reliable: true });
-                
-                tempConn.on('close', () => {
-                    if (!gameStarted) {
-                        // 게임 시작 전 연결이 끊김 (방이 꽉 차서 튕겨남) -> 다음 방 탐색
-                        joinPeer.destroy();
-                        tryHostOrJoinPublic(index + 1);
-                    }
-                });
+        // 페이지 로드 후 약간의 지연을 두고 방 목록 자동 갱신 (서버 초기화 대기 시간)
+        setTimeout(() => {
+            if (window.refreshRoomBrowser) window.refreshRoomBrowser();
+        }, 1500);
 
-                tempConn.on('open', () => {
-                    // 튕겨나지 않는지 0.25초 대기 후 접속 처리
-                    setTimeout(() => {
-                        if (tempConn.open && !gameStarted) {
-                            peer = joinPeer;
-                            conn = tempConn;
-                            isHost = false;
-                            myRole = 'P2';
-                            currentRoomId = roomId;
-                            statusMsg.style.color = "#2ec4b6";
-                            statusMsg.innerText = '빠른 매칭 성공! 곧 게임이 시작됩니다.';
-                            setupConnection();
-                        }
-                    }, 250);
-                });
-            });
-
-            joinPeer.on('error', (err) => {
-                joinPeer.destroy();
-                tryHostOrJoinPublic(index + 1); // 접속 실패 시 다음 채널 탐색
-            });
-        }
-        // --- 자동 매칭 로직 끝 ---
-
+        // 공용 TURN 서버 설정 (Metered OpenRelay - 무료 TURN 서버)
+        // 이를 통해 서로 다른 WiFi/네트워크 환경에서도 방화벽을 뚫고 확실하게 연결됩니다.
+        const peerConfig = {
+<!-- ... existing code ... -->
         // 공용 TURN 서버 설정 (Metered OpenRelay - 무료 TURN 서버)
         // 이를 통해 서로 다른 WiFi/네트워크 환경에서도 방화벽을 뚫고 확실하게 연결됩니다.
         const peerConfig = {
             'iceServers': [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun.cloudflare.com:3478' },
                 { urls: 'stun:openrelay.metered.ca:80' },
                 {
                     urls: "turn:openrelay.metered.ca:80",
                     username: "openrelayproject",
                     credential: "openrelayproject"
                 },
-                {
-                    urls: "turn:openrelay.metered.ca:443",
-                    username: "openrelayproject",
-                    credential: "openrelayproject"
-                },
-                {
-                    urls: "turn:openrelay.metered.ca:443?transport=tcp",
-                    username: "openrelayproject",
-                    credential: "openrelayproject"
-                }
-            ]
-        };
-
-        // 초대 링크 복사 기능
-        window.copyInviteLink = function() {
-            const inviteUrl = window.location.origin + window.location.pathname + '?room=' + currentRoomId;
-            
-            // iframe 내부 등 보안 제약이 있을 수 있으므로 구식 방식과 최신 방식을 병용
-            try {
-                navigator.clipboard.writeText(inviteUrl).then(showToast);
-            } catch (err) {
-                const tempInput = document.createElement("input");
-                tempInput.value = inviteUrl;
-                document.body.appendChild(tempInput);
-                tempInput.select();
-                document.execCommand("copy");
-                document.body.removeChild(tempInput);
-                showToast();
-            }
-        };
-
-        function showToast() {
-            const toast = document.getElementById('toast-msg');
-            toast.style.opacity = '1';
-            setTimeout(() => { toast.style.opacity = '0'; }, 2500);
-        }
-
-        // 방 생성 (Host) - P2P 방 직접 개설
-        window.hostGame = function() {
-            if (peer) peer.destroy(); 
-            const peerId = generateId();
-            currentRoomId = peerId;
-            
-            // 다른 네트워크(다른 PC)에서도 접속 가능하도록 구글 공용 STUN 서버 및 공개 TURN 서버 적용
-            peer = new Peer(peerId, { config: peerConfig });
-            isHost = true;
-            myRole = 'P1';
-
-            // 방을 만들면 URL을 내 방 코드로 업데이트하여 복사하기 쉽게 함
-            window.history.pushState({}, '', `?room=${peerId}`);
-
-            statusMsg.style.color = "#45a29e";
-            statusMsg.innerText = '방을 생성하는 중...';
-
-            peer.on('open', (id) => {
-                document.getElementById('host-id-display').style.display = 'block';
-                document.getElementById('my-id').innerText = id;
-                statusMsg.innerText = '방 개설 완료! 친구에게 초대 링크나 코드를 전달하세요.';
-            });
-
-            peer.on('connection', (connection) => {
-                // 이미 게임에 참가자가 있다면 추가 접속 거부 (관전 불가, 1:1 제한)
-                if (conn && conn.open) {
-                    setTimeout(() => connection.close(), 100);
-                    return;
-                }
-                conn = connection;
-                setupConnection();
-            });
-
-            peer.on('error', (err) => { 
-                console.error("PeerJS 호스트 에러:", err);
-                statusMsg.style.color = "#ff3366";
-                if (err.type === 'unavailable-id') {
-                    statusMsg.innerText = '방 생성 실패: 코드가 겹쳤습니다. 다시 시도해주세요.';
-                } else {
-                    statusMsg.innerText = '네트워크 오류: ' + (err.type || err); 
-                }
-            });
-        }
-
-        // P2P 연결 세팅
-        function setupConnection() {
-            const startGame = () => {
-                document.getElementById('lobby').style.display = 'none';
-                document.getElementById('canvas-container').style.display = 'block';
-                document.getElementById('ui').style.display = 'block';
-                
-                const roleEl = document.getElementById('role-display');
-                if (isHost) {
-                    roleEl.innerHTML = '<span class="echo-text">과거 (Echo)</span>';
-                } else {
-                    roleEl.innerHTML = '<span class="omen-text">미래 (Omen)</span>';
-                }
-                
-                initGame(); // 3D 파쿠르 맵 생성 및 초기화
-            };
-
-            // 연결이 이미 열려있는지 확인하여 안전하게 진입
-            if (conn.open) {
-                startGame();
-            } else {
-                conn.on('open', startGame);
-            }
-
-            // 통신 단절 시 처리
-            conn.on('close', () => {
-                document.getElementById('clear-screen').innerHTML = '<h2>CONNECTION LOST</h2><p>상대방과의 연결이 끊어졌습니다.</p><button class="btn-restart" onclick="location.reload()">메인으로</button>';
-                document.getElementById('clear-screen').style.display = 'flex';
-                document.getElementById('ui').style.display = 'none';
-            });
-
-            // 상대방 데이터 수신
-            conn.on('data', (data) => {
-                if (data.type === 'sync') {
-                    if (isHost) {
-                        netData.p2.x = data.x; 
-                        netData.p2.y = data.y; 
-                        netData.p2.z = data.z;
-                    } else {
-                        netData.p1.x = data.x; 
-                        netData.p1.y = data.y; 
-                        netData.p1.z = data.z;
-                        targetMaxTetherLength = data.tetherMax; // 호스트와 테더 설정 동기화
-                    }
-                    if (data.cleared && !isCleared) {
-                        triggerClearScreen();
-                    }
-                }
-            });
-        }
-
-        // 초당 30회 네트워크 동기화 전송
-        setInterval(() => {
-            if (gameStarted && conn && conn.open && localPlayer) {
-                conn.send({ 
-                    type: 'sync', 
-                    x: localPlayer.position.x, 
-                    y: localPlayer.position.y, 
-                    z: localPlayer.position.z,
-                    tetherMax: targetMaxTetherLength,
-                    cleared: isCleared
-                });
-            }
-        }, 1000 / 30);
-
-
-        let scene, camera, renderer;
-        let localPlayer, remotePlayer, tether;
-        let platforms = [];
-        let goalBox; 
-        
-        // 이동 및 점프 물리 변수
-        let vy = 0;
-        const gravity = -0.012;
-        const jumpImpulse = 0.32;
-        let isGrounded = false;
-        const moveSpeed = 0.18;
-
-        // Q/E 테더 조절 변수 (최소/최대 한계치)
-        let targetMaxTetherLength = 14.0;
-        const MIN_TETHER = 4.0;  // 테더 최단 한계
-        const MAX_TETHER = 28.0; // 테더 최장 한계
-
-        function initGame() {
-            const container = document.getElementById('canvas-container');
-            scene = new THREE.Scene();
-            scene.fog = new THREE.FogExp2(0x0b0c10, 0.012);
-
-            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            container.appendChild(renderer.domElement);
-
-            // 조명 설정
-            scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-            const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
-            dirLight.position.set(20, 60, 20);
-            dirLight.castShadow = true;
-            dirLight.shadow.mapSize.width = 2048;
-            dirLight.shadow.mapSize.height = 2048;
-            dirLight.shadow.camera.near = 0.5;
-            dirLight.shadow.camera.far = 200;
-            const d = 50;
-            dirLight.shadow.camera.left = -d;
-            dirLight.shadow.camera.right = d;
-            dirLight.shadow.camera.top = d;
-            dirLight.shadow.camera.bottom = -d;
-            scene.add(dirLight);
-
-            // 거대 점프 맵 플랫폼 구축
-            buildGiantParkourMap();
-
-            // 캐릭터 생성 (플레이어 간 충돌 판정을 위해 Box3 추가)
-            const p1Geo = new THREE.BoxGeometry(1.4, 1.4, 1.4);
-            const p1Mat = new THREE.MeshStandardMaterial({ color: 0xff9f1c, roughness: 0.3, metalness: 0.2, emissive: 0x331e00 });
-            const p2Geo = new THREE.BoxGeometry(1.4, 1.4, 1.4);
-            const p2Mat = new THREE.MeshStandardMaterial({ color: 0x00f0ff, roughness: 0.3, metalness: 0.2, emissive: 0x003333 });
-
-            const p1 = new THREE.Mesh(p1Geo, p1Mat);
-            const p2 = new THREE.Mesh(p2Geo, p2Mat);
-            p1.castShadow = true; p1.receiveShadow = true;
-            p2.castShadow = true; p2.receiveShadow = true;
-
-            p1.position.set(netData.p1.x, netData.p1.y, netData.p1.z);
-            p2.position.set(netData.p2.x, netData.p2.y, netData.p2.z);
-            scene.add(p1); scene.add(p2);
-
-            if (isHost || myRole === 'Solo') {
-                localPlayer = p1; remotePlayer = p2;
-            } else {
-                localPlayer = p2; remotePlayer = p1;
-            }
-
-            // 테더(밧줄) 그래픽
-            const lineMat = new THREE.LineBasicMaterial({ color: 0x66fcf1, linewidth: 3 });
-            const lineGeo = new THREE.BufferGeometry().setFromPoints([p1.position, p2.position]);
-            tether = new THREE.Line(lineGeo, lineMat);
-            scene.add(tether);
-
-            if (myRole === 'Solo') {
-                remotePlayer.visible = false;
-                tether.visible = false;
-            }
-
-            gameStarted = true;
-            animate();
-        }
-
-        // 하나의 거대한 연속 점프 코스 맵 제작
-        function buildGiantParkourMap() {
-            // 시작 지점 안전 메인 발판
-            createPlatform(0, 0, 0, 16, 2, 12, 0x1f2833);
-
-            // 1단계: 지그재그 기본 오르막 발판
-            createPlatform(-5, 2, -10, 6, 1.5, 6, 0x3a506b);
-            createPlatform(5, 4, -18, 6, 1.5, 6, 0x3a506b);
-            createPlatform(-4, 7, -26, 5, 1.5, 5, 0x3a506b);
-            createPlatform(4, 9, -34, 5, 1.5, 5, 0x3a506b);
-
-            // 2단계: 양갈래 선택 구간 (두 플레이어가 갈라져야 하는 점프 구간)
-            createPlatform(-9, 12, -44, 4, 1.5, 8, 0xff9f1c); // Echo 추천 코스
-            createPlatform(9, 12, -44, 4, 1.5, 8, 0x00f0ff);  // Omen 추천 코스
-
-            // 3단계: 가로 수평 징검다리 좁은 발판들 (테더 조절 필수)
-            createPlatform(-6, 15, -56, 3, 1.2, 3, 0x5bc0be);
-            createPlatform(0, 17, -62, 4, 1.2, 4, 0x5bc0be);
-            createPlatform(6, 19, -68, 3, 1.2, 3, 0x5bc0be);
-
-            // 4단계: 높낮이가 큰 징검다리 파쿠르 (새로 추가된 긴 구간 시작)
-            createPlatform(0, 22, -78, 5, 1.5, 5, 0x3a506b);
-            createPlatform(-8, 25, -88, 4, 1.5, 4, 0x3a506b);
-            createPlatform(8, 28, -98, 4, 1.5, 4, 0x3a506b);
-            
-            // 5단계: 움직이는 듯한 느낌을 주는 불안정한 수직 구간
-            createPlatform(0, 31, -110, 3, 1.5, 3, 0xff5733); // 좁고 높은 발판
-            createPlatform(-5, 34, -120, 4, 1.5, 4, 0x3a506b);
-            createPlatform(5, 37, -130, 4, 1.5, 4, 0x3a506b);
-            createPlatform(0, 40, -142, 5, 1.5, 5, 0xff5733);
-
-            // 6단계: 최후의 도약 (매우 먼 거리, 테더를 최대치로 늘려야 함)
-            createPlatform(-12, 43, -155, 6, 1.5, 6, 0xff9f1c);
-            createPlatform(12, 43, -155, 6, 1.5, 6, 0x00f0ff);
-
-            // 7단계: 최종 영웅의 계단 및 정상 탑 (Goal Summit)
-            createPlatform(0, 47, -170, 8, 1.5, 6, 0x1f2833);
-            createPlatform(0, 50, -180, 12, 1.5, 10, 0x1f2833);
-            
-            // 골인 게이트 (정상 도착 지점)
-            const goalGeo = new THREE.BoxGeometry(14, 12, 12);
-            const goalMat = new THREE.MeshStandardMaterial({ 
-                color: 0x2ec4b6, transparent: true, opacity: 0.45, emissive: 0x2ec4b6, emissiveIntensity: 0.5 
-            });
-            const goalMesh = new THREE.Mesh(goalGeo, goalMat);
-            goalMesh.position.set(0, 56, -180);
-            scene.add(goalMesh);
-
-            // 골인 장식 게이트 기둥
-            const pillarGeo = new THREE.CylinderGeometry(0.5, 0.5, 14);
-            const pillarMat = new THREE.MeshStandardMaterial({ color: 0x66fcf1, emissive: 0x66fcf1 });
-            const pLeft = new THREE.Mesh(pillarGeo, pillarMat); pLeft.position.set(-7, 57, -180);
-            const pRight = new THREE.Mesh(pillarGeo, pillarMat); pRight.position.set(7, 57, -180);
-            scene.add(pLeft); scene.add(pRight);
-
-            // 명확하고 오차 없는 클리어 판정 영역 (Box3)
-            goalBox = new THREE.Box3();
-            goalBox.setFromObject(goalMesh);
-        }
-
-        function createPlatform(x, y, z, w, h, d, colorHex) {
-            const geo = new THREE.BoxGeometry(w, h, d);
-            const mat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.5, metalness: 0.1 });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.position.set(x, y, z);
-            mesh.castShadow = true; 
-            mesh.receiveShadow = true;
-            scene.add(mesh);
-
-            // 충돌 판정용 Bounding Box 지정
-            mesh.geometry.computeBoundingBox();
-            const box = new THREE.Box3();
-            box.setFromObject(mesh);
-            platforms.push({ mesh: mesh, box: box, topY: y + h / 2 });
-        }
-
-        const keys = { w: false, a: false, s: false, d: false, space: false, q: false, e: false };
-        
-        window.addEventListener('keydown', (e) => {
-            const k = e.key.toLowerCase();
-            if (k === 'w') keys.w = true;
-            if (k === 'a') keys.a = true;
-            if (k === 's') keys.s = true;
-            if (k === 'd') keys.d = true;
-            if (e.code === 'Space') { keys.space = true; e.preventDefault(); }
-            if (k === 'q') keys.q = true;
-            if (k === 'e') keys.e = true;
-        });
-
-        window.addEventListener('keyup', (e) => {
-            const k = e.key.toLowerCase();
-            if (k === 'w') keys.w = false;
-            if (k === 'a') keys.a = false;
-            if (k === 's') keys.s = false;
-            if (k === 'd') keys.d = false;
-            if (e.code === 'Space') keys.space = false;
-            if (k === 'q') keys.q = false;
-            if (k === 'e') keys.e = false;
-        });
-
-        window.addEventListener('resize', () => {
-            if (!camera) return;
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
-        function animate() {
-            if (!gameStarted) return;
-            requestAnimationFrame(animate);
-
-            // 1. Q, E 키로 테더 길이 조절 (한계치 설정)
-            if (keys.q) {
-                targetMaxTetherLength = Math.max(MIN_TETHER, targetMaxTetherLength - 0.2);
-            }
-            if (keys.e) {
-                targetMaxTetherLength = Math.min(MAX_TETHER, targetMaxTetherLength + 0.2);
-            }
-
-            // HUD UI 업데이트
-            document.getElementById('tether-max-val').innerText = targetMaxTetherLength.toFixed(1);
-
-            // 2. 수평 이동 처리
-            let dx = 0;
-            let dz = 0;
-            if (keys.w) dz -= moveSpeed;
-            if (keys.s) dz += moveSpeed;
-            if (keys.a) dx -= moveSpeed;
-            if (keys.d) dx += moveSpeed;
-
-            localPlayer.position.x += dx;
-            localPlayer.position.z += dz;
-
-            // 플레이어 간 AABB(직육면체) 물리 충돌 엔진 (서로 안겹치게 + 밟기 허용)
-            const pSize = 1.4;
-            const pHalf = pSize / 2;
-            
-            // Y축 높이 차이가 커서 내 발바닥이 상대방 머리 근처거나 그 위라면 수평으로 밀어내지 않음 (밟기 허용)
-            const isAbove = (localPlayer.position.y - pHalf) >= (remotePlayer.position.y + pHalf - 0.2);
-
-            if (!isAbove) {
-                const localBox = new THREE.Box3().setFromCenterAndSize(localPlayer.position, new THREE.Vector3(pSize, pSize, pSize));
-                const remoteBox = new THREE.Box3().setFromCenterAndSize(remotePlayer.position, new THREE.Vector3(pSize, pSize, pSize));
-                
-                if (localBox.intersectsBox(remoteBox)) {
-                    // 겹친 정도 계산
-                    const overlapX = Math.min(localBox.max.x - remoteBox.min.x, remoteBox.max.x - localBox.min.x);
-                    const overlapZ = Math.min(localBox.max.z - remoteBox.min.z, remoteBox.max.z - localBox.min.z);
-                    
-                    // 덜 겹친 쪽 축(X 또는 Z)을 기준으로 튕겨냄 (직육면체 블록 충돌)
-                    if (overlapX < overlapZ) {
-                        if (localPlayer.position.x < remotePlayer.position.x) localPlayer.position.x -= overlapX;
-                        else localPlayer.position.x += overlapX;
-                    } else {
-                        if (localPlayer.position.z < remotePlayer.position.z) localPlayer.position.z -= overlapZ;
-                        else localPlayer.position.z += overlapZ;
-                    }
-                }
-            }
-
-            // 3. 점프 및 중력 물리
-            if (keys.space && isGrounded) {
-                vy = jumpImpulse;
-                isGrounded = false;
-            }
-
-            vy += gravity;
-            localPlayer.position.y += vy;
-
-            // 4. 발판 착지/충돌 검사
-            let onAnyPlatform = false;
-            const playerFootY = localPlayer.position.y - pHalf;
-
-            // 4-1. 상대방 플레이어 머리 위 착지 검사 (플레이어 밟고 올라가기)
-            const remoteTopY = remotePlayer.position.y + pHalf;
-            if (vy <= 0 && playerFootY <= remoteTopY && playerFootY >= remoteTopY - 0.6) {
-                // 발바닥이 상대방 머리의 수평(X, Z) 범위 안에 있는지 확인
-                if (localPlayer.position.x >= remotePlayer.position.x - pHalf && localPlayer.position.x <= remotePlayer.position.x + pHalf &&
-                    localPlayer.position.z >= remotePlayer.position.z - pHalf && localPlayer.position.z <= remotePlayer.position.z + pHalf) {
-                    
-                    localPlayer.position.y = remoteTopY + pHalf; // 상대 머리 위에 딱 세움
-                    vy = 0;
-                    isGrounded = true;
-                    onAnyPlatform = true;
-                }
-            }
-
-            // 4-2. 맵 발판 검사
-            if (!onAnyPlatform) {
-                for (let p of platforms) {
-                    // 발판 수평 범위 내에 있는지 확인
-                    if (localPlayer.position.x >= p.box.min.x - 0.5 && localPlayer.position.x <= p.box.max.x + 0.5 &&
-                        localPlayer.position.z >= p.box.min.z - 0.5 && localPlayer.position.z <= p.box.max.z + 0.5) {
-                        
-                        // 발판 윗면에 착지하는 순간 감지
-                        if (vy <= 0 && playerFootY <= p.topY && playerFootY >= p.topY - 0.6) {
-                            localPlayer.position.y = p.topY + pHalf;
-                            vy = 0;
-                            isGrounded = true;
-                            onAnyPlatform = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (!onAnyPlatform && localPlayer.position.y > 0) {
-                isGrounded = false;
-            }
-
-            // 5. 맵 아래로 추락 시 체크포인트 리스폰 처리
-            if (localPlayer.position.y < -15) {
-                // 원격 플레이어 부근이나 시작 발판으로 안전하게 리스폰
-                localPlayer.position.set(remotePlayer.position.x, remotePlayer.position.y + 3, remotePlayer.position.z);
-                vy = 0;
-            }
-
-            // 6. 상대방 위치 보간 동기화 (원격 플레이어)
-            if (myRole === 'Solo') {
-                remotePlayer.position.copy(localPlayer.position);
-            } else if (isHost) {
-                remotePlayer.position.lerp(new THREE.Vector3(netData.p2.x, netData.p2.y, netData.p2.z), 0.35);
-            } else {
-                remotePlayer.position.lerp(new THREE.Vector3(netData.p1.x, netData.p1.y, netData.p1.z), 0.35);
-            }
-
-            // 7. 테더 물리 및 거리 한계 제어 (Q/E 연동)
-            const currentDist = localPlayer.position.distanceTo(remotePlayer.position);
-            document.getElementById('tether-len-val').innerText = currentDist.toFixed(1);
-            
-            // HUD 테더 바 채우기
-            const barPercent = Math.min(100, (currentDist / targetMaxTetherLength) * 100);
-            const tetherBar = document.getElementById('tether-bar');
-            tetherBar.style.width = barPercent + '%';
-
-            const warningEl = document.getElementById('tether-warning');
-
-            if (myRole !== 'Solo' && currentDist > targetMaxTetherLength) {
-                tether.material.color.setHex(0xff3366); // 초과시 붉은색
-                tetherBar.style.background = '#ff3366';
-                warningEl.style.display = 'block';
-
-                // 테더 잡아당김 보정 force: 한계를 넘어가면 서로를 향해 당김
-                const pullDir = new THREE.Vector3().subVectors(remotePlayer.position, localPlayer.position).normalize();
-                const excess = currentDist - targetMaxTetherLength;
-                localPlayer.position.addScaledVector(pullDir, excess * 0.25);
-            } else if (myRole !== 'Solo') {
-                tether.material.color.setHex(0x66fcf1);
-                tetherBar.style.background = 'linear-gradient(90deg, #45a29e, #66fcf1)';
-                warningEl.style.display = 'none';
-            }
-
-            // 8. 테더 선 그래픽 업데이트
-            const posAttr = tether.geometry.attributes.position;
-            posAttr.setXYZ(0, localPlayer.position.x, localPlayer.position.y, localPlayer.position.z);
-            posAttr.setXYZ(1, remotePlayer.position.x, remotePlayer.position.y, remotePlayer.position.z);
-            posAttr.needsUpdate = true;
-
-            // 9. 카메라 동적 추적 (두 플레이어의 중간 지점 상공)
-            const midX = (localPlayer.position.x + remotePlayer.position.x) / 2;
-            const midY = (localPlayer.position.y + remotePlayer.position.y) / 2;
-            const midZ = (localPlayer.position.z + remotePlayer.position.z) / 2;
-
-            camera.position.lerp(new THREE.Vector3(midX, midY + 14, midZ + 18), 0.08);
-            camera.lookAt(midX, midY + 1, midZ - 2);
-
-            // 10. 클리어(도착) 조건 검사
-            checkClearCondition();
-
-            renderer.render(scene, camera);
-        }
-
-        function checkClearCondition() {
-            if (isCleared) return;
-
-            // 두 플레이어의 Box3 구하기
-            const p1Box = new THREE.Box3().setFromCenterAndSize(
-                localPlayer.position, 
-                new THREE.Vector3(1.5, 2.0, 1.5)
-            );
-
-            if (myRole === 'Solo') {
-                if (goalBox.intersectsBox(p1Box)) {
-                    isCleared = true;
-                    triggerClearScreen();
-                }
-                return;
-            }
-
-            const p2Box = new THREE.Box3().setFromCenterAndSize(
-                remotePlayer.position, 
-                new THREE.Vector3(1.5, 2.0, 1.5)
-            );
-
-            // 호스트와 게스트 모두 골인 구역(GoalBox) 안에 들어왔는지 확인
-            if (goalBox.intersectsBox(p1Box) && goalBox.intersectsBox(p2Box)) {
-                isCleared = true;
-                triggerClearScreen();
-            }
-        }
-
-        function triggerClearScreen() {
-            document.getElementById('clear-screen').style.display = 'flex';
-            document.getElementById('ui').style.display = 'none';
-        }
-    </script>
-</body>
-</html>
+<!-- ... existing code ... -->
