@@ -275,12 +275,6 @@
                 내 방 코드: <span id="my-id">생성 중...</span>
             </div>
             
-            <hr style="border: 0; height: 1px; background: rgba(255,255,255,0.1); margin: 15px 0;">
-
-            <p style="margin: 0 0 5px 0; color: #c5c6c7; font-size: 13px; font-weight: bold;">[ 직접 코드 입력 접속 ]</p>
-            <input type="text" id="join-id-input" placeholder="초대 코드 (영문/숫자 5자리)" maxlength="5" autocomplete="off" style="text-transform: uppercase;">
-            <button class="btn-join" onclick="joinGame()">코드 입장 (Join)</button>
-            
             <div id="status-msg"></div>
         </div>
     </div>
@@ -375,12 +369,22 @@
 
                 countBadge.innerText = `${activeRooms.length}개 방 열림`;
 
+                const soloRoomHtml = `
+                    <div class="room-item">
+                        <div class="room-info">
+                            <div class="room-title">🏃‍♂️ 훈련장 (혼자 하기)</div>
+                            <div class="room-code">자유롭게 맵을 탐험하세요</div>
+                        </div>
+                        <button class="btn-room-join" style="background: #ff9f1c; color: #0b0c10;" onclick="startSoloGame()">입장하기</button>
+                    </div>
+                `;
+
                 if (activeRooms.length === 0) {
-                    listContainer.innerHTML = '<div class="empty-rooms">현재 개설된 방이 없습니다. 방을 만들어 보세요!</div>';
+                    listContainer.innerHTML = soloRoomHtml + '<div class="empty-rooms">현재 개설된 멀티플레이 방이 없습니다.</div>';
                     return;
                 }
 
-                listContainer.innerHTML = activeRooms.map(r => `
+                listContainer.innerHTML = soloRoomHtml + activeRooms.map(r => `
                     <div class="room-item">
                         <div class="room-info">
                             <div class="room-title">🏰 ${escapeHtml(r.title || '탐험가들의 방')}</div>
@@ -426,11 +430,49 @@
             }
         }
 
-        // 특정 방 ID로 참가
+        // 특정 방 ID로 즉시 참가
         function joinRoomById(targetRoomId) {
-            document.getElementById('join-id-input').value = targetRoomId;
-            joinGame();
+            if (peer) peer.destroy();
+            
+            peer = new Peer(undefined, { config: peerConfig });
+            isHost = false;
+            myRole = 'P2';
+            statusMsg.innerText = `'${targetRoomId}' 방에 연결 중...`;
+
+            peer.on('open', (id) => {
+                conn = peer.connect(targetRoomId);
+                setupConnection();
+            });
+
+            peer.on('error', (err) => { 
+                console.error("PeerJS 조인 에러:", err);
+                statusMsg.innerText = '방을 찾을 수 없거나 연결 실패. (오류: ' + (err.type || err) + ')'; 
+            });
         }
+
+        // 솔로 모드 시작
+        window.startSoloGame = function() {
+            if (peer) peer.destroy();
+            isHost = true;
+            myRole = 'Solo';
+            
+            document.getElementById('lobby').style.display = 'none';
+            document.getElementById('canvas-container').style.display = 'block';
+            document.getElementById('ui').style.display = 'block';
+            
+            const roleEl = document.getElementById('role-display');
+            roleEl.innerHTML = '<span class="echo-text">솔로 탐험가</span>';
+            
+            // UI 숨기기 (솔로 모드에서는 테더가 필요 없음)
+            document.querySelector('.tether-bar-container').style.display = 'none';
+            document.querySelector('.tether-info').style.display = 'none';
+            document.getElementById('tether-warning').style.display = 'none';
+
+            // 네트워크 오류 방지용 가짜 연결 객체 생성
+            conn = { send: () => {}, open: true };
+            
+            initGame();
+        };
 
         // 공용 TURN 서버 설정 (Metered OpenRelay - 무료 TURN 서버)
         // 이를 통해 서로 다른 WiFi/네트워크 환경에서도 방화벽을 뚫고 확실하게 연결됩니다.
@@ -492,30 +534,6 @@
                     statusMsg.innerText = '네트워크 오류: ' + (err.type || err); 
                 }
                 removeRoomFromFirestore(currentRoomId);
-            });
-        }
-
-        // 방 참가 (Join)
-        function joinGame() {
-            const joinId = document.getElementById('join-id-input').value.trim().toUpperCase();
-            if (!joinId || joinId.length !== 5) { statusMsg.innerText = '5자리 코드를 입력해주세요.'; return; }
-            
-            if (peer) peer.destroy();
-            
-            // 참가자도 공용 STUN 서버 및 공개 TURN 서버 적용
-            peer = new Peer(undefined, { config: peerConfig });
-            isHost = false;
-            myRole = 'P2';
-            statusMsg.innerText = `'${joinId}' 방에 연결 중...`;
-
-            peer.on('open', (id) => {
-                conn = peer.connect(joinId);
-                setupConnection();
-            });
-
-            peer.on('error', (err) => { 
-                console.error("PeerJS 조인 에러:", err);
-                statusMsg.innerText = '방을 찾을 수 없거나 연결 실패. (오류: ' + (err.type || err) + ')'; 
             });
         }
 
@@ -645,7 +663,7 @@
             p2.position.set(netData.p2.x, netData.p2.y, netData.p2.z);
             scene.add(p1); scene.add(p2);
 
-            if (isHost) {
+            if (isHost || myRole === 'Solo') {
                 localPlayer = p1; remotePlayer = p2;
             } else {
                 localPlayer = p2; remotePlayer = p1;
@@ -656,6 +674,11 @@
             const lineGeo = new THREE.BufferGeometry().setFromPoints([p1.position, p2.position]);
             tether = new THREE.Line(lineGeo, lineMat);
             scene.add(tether);
+
+            if (myRole === 'Solo') {
+                remotePlayer.visible = false;
+                tether.visible = false;
+            }
 
             gameStarted = true;
             animate();
@@ -879,7 +902,9 @@
             }
 
             // 6. 상대방 위치 보간 동기화 (원격 플레이어)
-            if (isHost) {
+            if (myRole === 'Solo') {
+                remotePlayer.position.copy(localPlayer.position);
+            } else if (isHost) {
                 remotePlayer.position.lerp(new THREE.Vector3(netData.p2.x, netData.p2.y, netData.p2.z), 0.35);
             } else {
                 remotePlayer.position.lerp(new THREE.Vector3(netData.p1.x, netData.p1.y, netData.p1.z), 0.35);
@@ -896,7 +921,7 @@
 
             const warningEl = document.getElementById('tether-warning');
 
-            if (currentDist > targetMaxTetherLength) {
+            if (myRole !== 'Solo' && currentDist > targetMaxTetherLength) {
                 tether.material.color.setHex(0xff3366); // 초과시 붉은색
                 tetherBar.style.background = '#ff3366';
                 warningEl.style.display = 'block';
@@ -905,7 +930,7 @@
                 const pullDir = new THREE.Vector3().subVectors(remotePlayer.position, localPlayer.position).normalize();
                 const excess = currentDist - targetMaxTetherLength;
                 localPlayer.position.addScaledVector(pullDir, excess * 0.25);
-            } else {
+            } else if (myRole !== 'Solo') {
                 tether.material.color.setHex(0x66fcf1);
                 tetherBar.style.background = 'linear-gradient(90deg, #45a29e, #66fcf1)';
                 warningEl.style.display = 'none';
@@ -939,6 +964,15 @@
                 localPlayer.position, 
                 new THREE.Vector3(1.5, 2.0, 1.5)
             );
+
+            if (myRole === 'Solo') {
+                if (goalBox.intersectsBox(p1Box)) {
+                    isCleared = true;
+                    triggerClearScreen();
+                }
+                return;
+            }
+
             const p2Box = new THREE.Box3().setFromCenterAndSize(
                 remotePlayer.position, 
                 new THREE.Vector3(1.5, 2.0, 1.5)
