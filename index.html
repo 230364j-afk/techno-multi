@@ -215,23 +215,26 @@
             <h1>CHRONO-TETHER</h1>
             <div class="subtitle">거대 점프 맵 멀티플레이어 협동 퍼즐</div>
             
-            <button class="btn-quick" style="width: 100%; border-radius: 8px; font-weight: bold; border: none; cursor: pointer;" onclick="hostGame()">🎮 새로운 방 만들기 (방장)</button>
+            <!-- 자동 매칭 버튼 -->
+            <button class="btn-quick" style="width: 100%; border-radius: 8px; font-weight: bold; border: none; cursor: pointer;" onclick="autoMatch()">🚀 빠른 매칭 (코드 없이 자동 참가)</button>
+
+            <!-- 친구와 하기 (수동 방 생성 및 입장) -->
+            <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.05);">
+                <div style="font-size: 13px; color: #66fcf1; margin-bottom: 10px; font-weight: bold;">[친구와 함께 하기]</div>
+                <button class="btn-host" style="width: 100%; margin: 0 0 10px 0; font-size: 14px; padding: 10px;" onclick="hostGame()">방 만들기 (코드 생성)</button>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="manual-room-code" placeholder="방 코드 (5자리)" style="width: 65%; margin: 0; padding: 10px; font-size: 14px; text-transform: uppercase;" maxlength="5">
+                    <button class="btn-join" style="width: 35%; margin: 0; padding: 10px; font-size: 14px;" onclick="joinManualRoom()">입장</button>
+                </div>
+            </div>
+
+            <button class="btn-room-join" style="background: transparent; border: 1px solid #45a29e; color: #45a29e; width: 100%; padding: 10px; font-size: 14px;" onclick="startSoloGame()">🏃‍♂️ 훈련장 (혼자 하기)</button>
 
             <div id="host-id-display" style="margin: 15px 0; padding: 15px; background: rgba(0,0,0,0.5); border: 1px dashed #ff9f1c; border-radius: 8px; display: none;">
                 <div style="font-size: 13px; color: #c5c6c7; margin-bottom: 5px;">내 방 초대 코드</div>
                 <div style="font-size: 28px; font-weight: bold; color: #ff9f1c; letter-spacing: 3px;" id="my-id">생성 중...</div>
                 <button onclick="copyInviteLink()" style="background: transparent; border: 1px solid #ff9f1c; color: #ff9f1c; padding: 8px; font-size: 12px; margin-top: 10px; width: auto;">🔗 초대 링크 복사하기</button>
             </div>
-
-            <div style="margin: 20px 0; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px;">
-                <div style="font-size: 14px; color: #66fcf1; font-weight: bold; margin-bottom: 10px;">친구가 방을 만들었나요?</div>
-                <div style="display: flex; gap: 10px; justify-content: center; align-items: center; width: 100%;">
-                    <input type="text" id="manual-room-code" placeholder="방 코드 입력 (5자리)" style="width: 60%; margin: 0; padding: 12px; font-size: 16px; text-transform: uppercase;" maxlength="5">
-                    <button class="btn-join" style="width: 40%; margin: 0; padding: 12px; font-size: 14px;" onclick="joinManualRoom()">접속하기</button>
-                </div>
-            </div>
-
-            <button class="btn-room-join" style="background: transparent; border: 1px solid #45a29e; color: #45a29e; width: 100%; padding: 10px; font-size: 14px; margin-top: 10px;" onclick="startSoloGame()">🏃‍♂️ 훈련장 (혼자 하기)</button>
             
             <div id="status-msg"></div>
         </div>
@@ -316,9 +319,26 @@
             statusMsg.innerText = `'${targetRoomId}' 방에 연결 중... 잠시만 기다려주세요.`;
 
             peer.on('open', (id) => {
-                // 데이터 채널의 신뢰성 확보를 위해 옵션 추가
-                conn = peer.connect(targetRoomId, { reliable: true });
-                setupConnection();
+                const tempConn = peer.connect(targetRoomId, { reliable: true });
+                
+                // 만약 상대방이 꽉 차서 튕겨내거나 바로 닫히는 경우 처리
+                tempConn.on('close', () => {
+                    if (!gameStarted) {
+                        statusMsg.style.color = "#ff3366";
+                        statusMsg.innerText = '방이 꽉 찼거나 접근할 수 없습니다.';
+                        peer.destroy();
+                    }
+                });
+
+                tempConn.on('open', () => {
+                    // 호스트가 튕겨내지 않는지 짧게(0.25초) 확인 후 게임 진입
+                    setTimeout(() => {
+                        if (tempConn.open && !gameStarted) {
+                            conn = tempConn;
+                            setupConnection();
+                        }
+                    }, 250);
+                });
             });
 
             peer.on('error', (err) => { 
@@ -364,6 +384,98 @@
             
             initGame();
         };
+
+        // --- 자동 매칭 (빠른 참가) 로직 ---
+        const MAX_PUBLIC_ROOMS = 10;
+        
+        window.autoMatch = function() {
+            if (peer) peer.destroy();
+            document.getElementById('host-id-display').style.display = 'none';
+            statusMsg.style.color = "#66fcf1";
+            statusMsg.innerText = '빈 방을 찾거나 새로운 방을 생성하는 중...';
+            tryHostOrJoinPublic(1);
+        };
+
+        function tryHostOrJoinPublic(index) {
+            if (index > MAX_PUBLIC_ROOMS) {
+                statusMsg.style.color = "#ff3366";
+                statusMsg.innerText = '현재 모든 빠른 매칭 방이 가득 찼습니다. 잠시 후 시도해주세요.';
+                return;
+            }
+
+            const roomId = `CHRONO_PUB_${index}`;
+            const testPeer = new Peer(roomId, { config: peerConfig });
+
+            // 1. 내가 이 방의 호스트가 될 수 있는지 확인 (빈 방이면 내가 방장이 됨)
+            testPeer.on('open', (id) => {
+                peer = testPeer;
+                isHost = true;
+                myRole = 'P1';
+                currentRoomId = id;
+                
+                statusMsg.style.color = "#45a29e";
+                statusMsg.innerText = `[빠른 매칭] 방 생성 완료! 다른 플레이어를 기다리는 중...`;
+                
+                peer.on('connection', (connection) => {
+                    // 이미 게임에 참가자가 있다면 추가 접속 거부 (1:1 제한 유지)
+                    if (conn && conn.open) {
+                        setTimeout(() => connection.close(), 100);
+                        return;
+                    }
+                    conn = connection;
+                    setupConnection();
+                });
+            });
+
+            // 2. 누군가 이미 방을 만들었다면 에러 발생 -> 해당 방으로 참가(Join) 시도
+            testPeer.on('error', (err) => {
+                if (err.type === 'unavailable-id') {
+                    testPeer.destroy();
+                    joinPublicRoom(roomId, index);
+                } else {
+                    statusMsg.style.color = "#ff3366";
+                    statusMsg.innerText = '네트워크 오류가 발생했습니다. 다시 시도해주세요.';
+                }
+            });
+        }
+
+        function joinPublicRoom(roomId, index) {
+            const joinPeer = new Peer(undefined, { config: peerConfig });
+            
+            joinPeer.on('open', () => {
+                const tempConn = joinPeer.connect(roomId, { reliable: true });
+                
+                tempConn.on('close', () => {
+                    if (!gameStarted) {
+                        // 게임 시작 전 연결이 끊김 (방이 꽉 차서 튕겨남) -> 다음 방 탐색
+                        joinPeer.destroy();
+                        tryHostOrJoinPublic(index + 1);
+                    }
+                });
+
+                tempConn.on('open', () => {
+                    // 튕겨나지 않는지 0.25초 대기 후 접속 처리
+                    setTimeout(() => {
+                        if (tempConn.open && !gameStarted) {
+                            peer = joinPeer;
+                            conn = tempConn;
+                            isHost = false;
+                            myRole = 'P2';
+                            currentRoomId = roomId;
+                            statusMsg.style.color = "#2ec4b6";
+                            statusMsg.innerText = '빠른 매칭 성공! 곧 게임이 시작됩니다.';
+                            setupConnection();
+                        }
+                    }, 250);
+                });
+            });
+
+            joinPeer.on('error', (err) => {
+                joinPeer.destroy();
+                tryHostOrJoinPublic(index + 1); // 접속 실패 시 다음 채널 탐색
+            });
+        }
+        // --- 자동 매칭 로직 끝 ---
 
         // 공용 TURN 서버 설정 (Metered OpenRelay - 무료 TURN 서버)
         // 이를 통해 서로 다른 WiFi/네트워크 환경에서도 방화벽을 뚫고 확실하게 연결됩니다.
@@ -438,6 +550,11 @@
             });
 
             peer.on('connection', (connection) => {
+                // 이미 게임에 참가자가 있다면 추가 접속 거부 (관전 불가, 1:1 제한)
+                if (conn && conn.open) {
+                    setTimeout(() => connection.close(), 100);
+                    return;
+                }
                 conn = connection;
                 setupConnection();
             });
