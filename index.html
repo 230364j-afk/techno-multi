@@ -189,66 +189,25 @@
             pointer-events: none;
             text-shadow: 0 1px 3px rgba(0,0,0,0.8);
         }
+        
+        /* 추가된 복사 알림 UI */
+        #toast-msg {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            background: #2ec4b6; color: #0b0c10; padding: 10px 20px; border-radius: 8px;
+            font-weight: bold; font-size: 14px; opacity: 0; transition: opacity 0.3s;
+            z-index: 200; pointer-events: none;
+        }
     </style>
     <!-- Three.js (3D Library) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <!-- PeerJS (P2P Networking) -->
     <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
-
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // 전역 Firebase 초기화
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'chrono-tether-game';
-        let db = null;
-        let auth = null;
-
-        // 일반 스크립트 영역에서 사용할 수 있도록 Firebase 함수들을 window 전역 객체에 등록
-        window.collection = collection;
-        window.doc = doc;
-        window.setDoc = setDoc;
-        window.deleteDoc = deleteDoc;
-        window.onSnapshot = onSnapshot;
-
-        if (typeof __firebase_config !== 'undefined') {
-            try {
-                const config = JSON.parse(__firebase_config);
-                const app = initializeApp(config);
-                auth = getAuth(app);
-                db = getFirestore(app);
-                
-                window.db = db;
-                window.appId = appId;
-                window.auth = auth;
-
-                // 인증이 완료된 후에 방 목록을 불러오기 시작합니다.
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        window.initRoomListing();
-                    }
-                });
-
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (e) {
-                console.warn("Firebase 초기화 에러 (로컬 모드로 전환):", e);
-                window.initRoomListing();
-            }
-        } else {
-            // 환경 변수가 없을 때 (단순 로컬 HTML 실행 시)
-            window.initRoomListing();
-        }
-    </script>
 </head>
 <body>
 
     <!-- 0. 버전 표시 -->
-    <div id="version-badge">v.1.3</div>
+    <div id="version-badge">v.1.4 (P2P Link)</div>
+    <div id="toast-msg">클립보드에 복사되었습니다!</div>
 
     <!-- 1. 메인 로비 UI -->
     <div id="lobby">
@@ -256,31 +215,23 @@
             <h1>CHRONO-TETHER</h1>
             <div class="subtitle">거대 점프 맵 멀티플레이어 협동 퍼즐</div>
             
-            <button class="btn-quick" style="width: 100%; border-radius: 8px; font-weight: bold; border: none; cursor: pointer;" onclick="quickStart()">🚀 빠른 시작 (바로 접속)</button>
+            <button class="btn-quick" style="width: 100%; border-radius: 8px; font-weight: bold; border: none; cursor: pointer;" onclick="hostGame()">🎮 새로운 방 만들기 (방장)</button>
 
-            <!-- 실시간 공개 방 목록 -->
-            <div class="room-browser">
-                <div class="room-browser-header">
-                    <span>🌐 오픈된 게임 방 목록</span>
-                    <div>
-                        <button class="btn-refresh" onclick="window.initRoomListing()">🔄 새로고침</button>
-                        <span id="room-count-badge" style="font-size: 11px; color: #ff9f1c; margin-left: 8px;">불러오는 중...</span>
-                    </div>
+            <div id="host-id-display" style="margin: 15px 0; padding: 15px; background: rgba(0,0,0,0.5); border: 1px dashed #ff9f1c; border-radius: 8px; display: none;">
+                <div style="font-size: 13px; color: #c5c6c7; margin-bottom: 5px;">내 방 초대 코드</div>
+                <div style="font-size: 28px; font-weight: bold; color: #ff9f1c; letter-spacing: 3px;" id="my-id">생성 중...</div>
+                <button onclick="copyInviteLink()" style="background: transparent; border: 1px solid #ff9f1c; color: #ff9f1c; padding: 8px; font-size: 12px; margin-top: 10px; width: auto;">🔗 초대 링크 복사하기</button>
+            </div>
+
+            <div style="margin: 20px 0; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px;">
+                <div style="font-size: 14px; color: #66fcf1; font-weight: bold; margin-bottom: 10px;">친구가 방을 만들었나요?</div>
+                <div style="display: flex; gap: 10px; justify-content: center; align-items: center; width: 100%;">
+                    <input type="text" id="manual-room-code" placeholder="방 코드 입력 (5자리)" style="width: 60%; margin: 0; padding: 12px; font-size: 16px; text-transform: uppercase;" maxlength="5">
+                    <button class="btn-join" style="width: 40%; margin: 0; padding: 12px; font-size: 14px;" onclick="joinManualRoom()">접속하기</button>
                 </div>
-                <div id="room-list-content">
-                    <div class="empty-rooms">열린 방을 찾아보고 있습니다...</div>
-                </div>
             </div>
 
-            <div style="display: flex; gap: 10px; justify-content: center; align-items: center; margin-bottom: 20px; width: 85%;">
-                <input type="text" id="manual-room-code" placeholder="방 코드 직접 입력 (5자리)" style="width: 65%; margin: 0; padding: 12px; font-size: 16px; text-transform: uppercase;" maxlength="5">
-                <button class="btn-join" style="width: 35%; margin: 0; padding: 12px; font-size: 14px;" onclick="joinManualRoom()">코드로 입장</button>
-            </div>
-
-            <button class="btn-host" onclick="hostGame()">🎮 새로운 방 만들기 (Host)</button>
-            <div id="host-id-display" style="margin: 12px 0; font-size: 18px; font-weight: bold; color: #ff9f1c; display: none;">
-                내 방 코드: <span id="my-id">생성 중...</span>
-            </div>
+            <button class="btn-room-join" style="background: transparent; border: 1px solid #45a29e; color: #45a29e; width: 100%; padding: 10px; font-size: 14px; margin-top: 10px;" onclick="startSoloGame()">🏃‍♂️ 훈련장 (혼자 하기)</button>
             
             <div id="status-msg"></div>
         </div>
@@ -334,6 +285,16 @@
 
         const statusMsg = document.getElementById('status-msg');
 
+        // 페이지 로드 시 URL에 방 코드가 있으면 자동 접속 시도
+        window.onload = () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomCode = urlParams.get('room');
+            if (roomCode && roomCode.length === 5) {
+                document.getElementById('manual-room-code').value = roomCode;
+                joinRoomById(roomCode);
+            }
+        };
+
         function generateId() {
             // 방 코드가 겹치지 않도록 영문 대문자 + 숫자로 구성된 5자리 방 코드 생성 (헷갈리는 글자 O,0,I,1 제외)
             const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -344,101 +305,6 @@
             return result;
         }
 
-        // --- 실시간 방 목록 구독 및 관리 ---
-        let roomUnsubscribe = null;
-        window.initRoomListing = function() {
-            const listContainer = document.getElementById('room-list-content');
-            const countBadge = document.getElementById('room-count-badge');
-
-            if (!window.db || !window.auth || !window.auth.currentUser) {
-                countBadge.innerText = '로컬 모드';
-                listContainer.innerHTML = '<div class="empty-rooms">직접 코드를 생성하거나 입력하여 참가하세요.</div>';
-                return;
-            }
-
-            const roomsCol = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'rooms');
-
-            if (roomUnsubscribe) roomUnsubscribe(); // 기존 리스너가 있다면 제거 후 재연결
-
-            countBadge.innerText = '동기화 중...';
-            listContainer.innerHTML = '<div class="empty-rooms">방 목록을 갱신하는 중입니다...</div>';
-
-            roomUnsubscribe = window.onSnapshot(roomsCol, (snapshot) => {
-                const activeRooms = [];
-                const now = Date.now();
-
-                snapshot.forEach((documentSnapshot) => {
-                    const data = documentSnapshot.data();
-                    // 생성된 지 30분이 지난 방(유령 방)은 필터링하여 제외
-                    if (data && data.roomId && (now - (data.createdAt || 0) < 30 * 60 * 1000)) {
-                        activeRooms.push(data);
-                    }
-                });
-
-                currentActiveRooms = activeRooms;
-                countBadge.innerText = `${activeRooms.length}개 방 열림`;
-
-                const soloRoomHtml = `
-                    <div class="room-item">
-                        <div class="room-info">
-                            <div class="room-title">🏃‍♂️ 훈련장 (혼자 하기)</div>
-                            <div class="room-code">자유롭게 맵을 탐험하세요</div>
-                        </div>
-                        <button class="btn-room-join" style="background: #ff9f1c; color: #0b0c10;" onclick="startSoloGame()">입장하기</button>
-                    </div>
-                `;
-
-                if (activeRooms.length === 0) {
-                    listContainer.innerHTML = soloRoomHtml + '<div class="empty-rooms">현재 개설된 멀티플레이 방이 없습니다.</div>';
-                    return;
-                }
-
-                listContainer.innerHTML = soloRoomHtml + activeRooms.map(r => `
-                    <div class="room-item">
-                        <div class="room-info">
-                            <div class="room-title">🏰 ${escapeHtml(r.title || '탐험가들의 방')}</div>
-                            <div class="room-code">코드: ${r.roomId}</div>
-                        </div>
-                        <button class="btn-room-join" onclick="joinRoomById('${r.roomId}')">입장하기</button>
-                    </div>
-                `).join('');
-            }, (error) => {
-                console.error("방 목록 구독 에러:", error);
-                countBadge.innerText = '오류 발생';
-            });
-        };
-
-        function escapeHtml(str) {
-            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&quot;");
-        }
-
-        // 방 등록 (Firestore)
-        async function registerRoomInFirestore(roomId) {
-            if (!window.db || !window.auth || !window.auth.currentUser) return;
-            try {
-                const roomDoc = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'rooms', roomId);
-                await window.setDoc(roomDoc, {
-                    roomId: roomId,
-                    hostId: window.auth.currentUser.uid,
-                    title: `Chrono 방 #${roomId}`,
-                    createdAt: Date.now()
-                });
-            } catch (e) {
-                console.error("방 등록 실패:", e);
-            }
-        }
-
-        // 방 삭제 (Firestore)
-        async function removeRoomFromFirestore(roomId) {
-            if (!window.db || !roomId || !window.auth || !window.auth.currentUser) return;
-            try {
-                const roomDoc = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'rooms', roomId);
-                await window.deleteDoc(roomDoc);
-            } catch (e) {
-                console.error("방 삭제 실패:", e);
-            }
-        }
-
         // 특정 방 ID로 즉시 참가
         window.joinRoomById = function(targetRoomId) {
             if (peer) peer.destroy();
@@ -446,7 +312,8 @@
             peer = new Peer(undefined, { config: peerConfig });
             isHost = false;
             myRole = 'P2';
-            statusMsg.innerText = `'${targetRoomId}' 방에 연결 중...`;
+            statusMsg.style.color = "#ff9f1c";
+            statusMsg.innerText = `'${targetRoomId}' 방에 연결 중... 잠시만 기다려주세요.`;
 
             peer.on('open', (id) => {
                 // 데이터 채널의 신뢰성 확보를 위해 옵션 추가
@@ -456,7 +323,8 @@
 
             peer.on('error', (err) => { 
                 console.error("PeerJS 조인 에러:", err);
-                statusMsg.innerText = '방을 찾을 수 없거나 연결 실패. (코드를 다시 확인해주세요)'; 
+                statusMsg.style.color = "#ff3366";
+                statusMsg.innerText = '방을 찾을 수 없습니다. 코드를 확인하거나 방장이 아직 방을 여는 중일 수 있습니다.'; 
             });
         };
 
@@ -465,22 +333,11 @@
             const codeInput = document.getElementById('manual-room-code');
             const code = codeInput.value.trim().toUpperCase();
             if (code.length === 5) {
+                window.history.pushState({}, '', `?room=${code}`); // URL 업데이트
                 window.joinRoomById(code);
             } else {
+                statusMsg.style.color = "#ff3366";
                 statusMsg.innerText = '올바른 5자리 코드를 입력해주세요.';
-            }
-        };
-
-        // 빠른 시작 (자동 매칭)
-        window.quickStart = function() {
-            if (currentActiveRooms && currentActiveRooms.length > 0) {
-                // 열려있는 방이 있다면 가장 첫 번째 방으로 즉시 접속
-                statusMsg.innerText = '열려있는 방을 찾았습니다! 접속 중...';
-                joinRoomById(currentActiveRooms[0].roomId);
-            } else {
-                // 열려있는 방이 없다면 내가 직접 방장이 되어 새로운 방을 생성
-                statusMsg.innerText = '열려있는 방이 없어 새로운 방을 엽니다...';
-                hostGame();
             }
         };
 
@@ -533,8 +390,32 @@
             ]
         };
 
-        // 방 생성 (Host) - 공개 방 등록
-        function hostGame() {
+        // 초대 링크 복사 기능
+        window.copyInviteLink = function() {
+            const inviteUrl = window.location.origin + window.location.pathname + '?room=' + currentRoomId;
+            
+            // iframe 내부 등 보안 제약이 있을 수 있으므로 구식 방식과 최신 방식을 병용
+            try {
+                navigator.clipboard.writeText(inviteUrl).then(showToast);
+            } catch (err) {
+                const tempInput = document.createElement("input");
+                tempInput.value = inviteUrl;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand("copy");
+                document.body.removeChild(tempInput);
+                showToast();
+            }
+        };
+
+        function showToast() {
+            const toast = document.getElementById('toast-msg');
+            toast.style.opacity = '1';
+            setTimeout(() => { toast.style.opacity = '0'; }, 2500);
+        }
+
+        // 방 생성 (Host) - P2P 방 직접 개설
+        window.hostGame = function() {
             if (peer) peer.destroy(); 
             const peerId = generateId();
             currentRoomId = peerId;
@@ -544,46 +425,37 @@
             isHost = true;
             myRole = 'P1';
 
+            // 방을 만들면 URL을 내 방 코드로 업데이트하여 복사하기 쉽게 함
+            window.history.pushState({}, '', `?room=${peerId}`);
+
+            statusMsg.style.color = "#45a29e";
+            statusMsg.innerText = '방을 생성하는 중...';
+
             peer.on('open', (id) => {
                 document.getElementById('host-id-display').style.display = 'block';
                 document.getElementById('my-id').innerText = id;
-                statusMsg.innerText = '방을 공개 등록했습니다. 다른 플레이어의 접속을 기다리는 중...';
-                
-                // 오픈된 방 목록에 공유 등록
-                registerRoomInFirestore(id);
+                statusMsg.innerText = '방 개설 완료! 친구에게 초대 링크나 코드를 전달하세요.';
             });
 
             peer.on('connection', (connection) => {
                 conn = connection;
-                // 플레이어가 들어오면 목록에서 방 제거
-                removeRoomFromFirestore(currentRoomId);
                 setupConnection();
             });
 
             peer.on('error', (err) => { 
                 console.error("PeerJS 호스트 에러:", err);
+                statusMsg.style.color = "#ff3366";
                 if (err.type === 'unavailable-id') {
                     statusMsg.innerText = '방 생성 실패: 코드가 겹쳤습니다. 다시 시도해주세요.';
                 } else {
                     statusMsg.innerText = '네트워크 오류: ' + (err.type || err); 
                 }
-                removeRoomFromFirestore(currentRoomId);
             });
         }
-
-        // 창 닫을 때 방 목록에서 자동 제거
-        window.addEventListener('beforeunload', () => {
-            if (isHost && currentRoomId) {
-                removeRoomFromFirestore(currentRoomId);
-            }
-        });
 
         // P2P 연결 세팅
         function setupConnection() {
             const startGame = () => {
-                if (isHost && currentRoomId) {
-                    removeRoomFromFirestore(currentRoomId);
-                }
                 document.getElementById('lobby').style.display = 'none';
                 document.getElementById('canvas-container').style.display = 'block';
                 document.getElementById('ui').style.display = 'block';
