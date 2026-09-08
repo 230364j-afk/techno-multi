@@ -272,6 +272,11 @@
                 </div>
             </div>
 
+            <div style="display: flex; gap: 10px; justify-content: center; align-items: center; margin-bottom: 20px; width: 85%;">
+                <input type="text" id="manual-room-code" placeholder="방 코드 직접 입력 (5자리)" style="width: 65%; margin: 0; padding: 12px; font-size: 16px; text-transform: uppercase;" maxlength="5">
+                <button class="btn-join" style="width: 35%; margin: 0; padding: 12px; font-size: 14px;" onclick="joinManualRoom()">코드로 입장</button>
+            </div>
+
             <button class="btn-host" onclick="hostGame()">🎮 새로운 방 만들기 (Host)</button>
             <div id="host-id-display" style="margin: 12px 0; font-size: 18px; font-weight: bold; color: #ff9f1c; display: none;">
                 내 방 코드: <span id="my-id">생성 중...</span>
@@ -435,7 +440,7 @@
         }
 
         // 특정 방 ID로 즉시 참가
-        function joinRoomById(targetRoomId) {
+        window.joinRoomById = function(targetRoomId) {
             if (peer) peer.destroy();
             
             peer = new Peer(undefined, { config: peerConfig });
@@ -444,15 +449,27 @@
             statusMsg.innerText = `'${targetRoomId}' 방에 연결 중...`;
 
             peer.on('open', (id) => {
-                conn = peer.connect(targetRoomId);
+                // 데이터 채널의 신뢰성 확보를 위해 옵션 추가
+                conn = peer.connect(targetRoomId, { reliable: true });
                 setupConnection();
             });
 
             peer.on('error', (err) => { 
                 console.error("PeerJS 조인 에러:", err);
-                statusMsg.innerText = '방을 찾을 수 없거나 연결 실패. (오류: ' + (err.type || err) + ')'; 
+                statusMsg.innerText = '방을 찾을 수 없거나 연결 실패. (코드를 다시 확인해주세요)'; 
             });
-        }
+        };
+
+        // 수동 코드로 입장
+        window.joinManualRoom = function() {
+            const codeInput = document.getElementById('manual-room-code');
+            const code = codeInput.value.trim().toUpperCase();
+            if (code.length === 5) {
+                window.joinRoomById(code);
+            } else {
+                statusMsg.innerText = '올바른 5자리 코드를 입력해주세요.';
+            }
+        };
 
         // 빠른 시작 (자동 매칭)
         window.quickStart = function() {
@@ -563,7 +580,7 @@
 
         // P2P 연결 세팅
         function setupConnection() {
-            conn.on('open', () => {
+            const startGame = () => {
                 if (isHost && currentRoomId) {
                     removeRoomFromFirestore(currentRoomId);
                 }
@@ -579,6 +596,20 @@
                 }
                 
                 initGame(); // 3D 파쿠르 맵 생성 및 초기화
+            };
+
+            // 연결이 이미 열려있는지 확인하여 안전하게 진입
+            if (conn.open) {
+                startGame();
+            } else {
+                conn.on('open', startGame);
+            }
+
+            // 통신 단절 시 처리
+            conn.on('close', () => {
+                document.getElementById('clear-screen').innerHTML = '<h2>CONNECTION LOST</h2><p>상대방과의 연결이 끊어졌습니다.</p><button class="btn-restart" onclick="location.reload()">메인으로</button>';
+                document.getElementById('clear-screen').style.display = 'flex';
+                document.getElementById('ui').style.display = 'none';
             });
 
             // 상대방 데이터 수신
