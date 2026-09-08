@@ -278,7 +278,7 @@
             <hr style="border: 0; height: 1px; background: rgba(255,255,255,0.1); margin: 15px 0;">
 
             <p style="margin: 0 0 5px 0; color: #c5c6c7; font-size: 13px; font-weight: bold;">[ 직접 코드 입력 접속 ]</p>
-            <input type="text" id="join-id-input" placeholder="초대 코드 (숫자 3자리)" maxlength="3" autocomplete="off">
+            <input type="text" id="join-id-input" placeholder="초대 코드 (영문/숫자 5자리)" maxlength="5" autocomplete="off" style="text-transform: uppercase;">
             <button class="btn-join" onclick="joinGame()">코드 입장 (Join)</button>
             
             <div id="status-msg"></div>
@@ -333,8 +333,13 @@
         const statusMsg = document.getElementById('status-msg');
 
         function generateId() {
-            // 100 ~ 999 사이의 3자리 숫자 문자열 생성
-            return Math.floor(Math.random() * 900 + 100).toString();
+            // 방 코드가 겹치지 않도록 영문 대문자 + 숫자로 구성된 5자리 방 코드 생성 (헷갈리는 글자 O,0,I,1 제외)
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let result = '';
+            for (let i = 0; i < 5; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
         }
 
         // --- 실시간 방 목록 구독 및 관리 ---
@@ -480,7 +485,12 @@
             });
 
             peer.on('error', (err) => { 
-                statusMsg.innerText = '네트워크 오류: ' + err.type; 
+                console.error("PeerJS 호스트 에러:", err);
+                if (err.type === 'unavailable-id') {
+                    statusMsg.innerText = '방 생성 실패: 코드가 겹쳤습니다. 다시 시도해주세요.';
+                } else {
+                    statusMsg.innerText = '네트워크 오류: ' + (err.type || err); 
+                }
                 removeRoomFromFirestore(currentRoomId);
             });
         }
@@ -488,7 +498,7 @@
         // 방 참가 (Join)
         function joinGame() {
             const joinId = document.getElementById('join-id-input').value.trim().toUpperCase();
-            if (!joinId) { statusMsg.innerText = '코드를 입력해주세요.'; return; }
+            if (!joinId || joinId.length !== 5) { statusMsg.innerText = '5자리 코드를 입력해주세요.'; return; }
             
             if (peer) peer.destroy();
             
@@ -503,7 +513,10 @@
                 setupConnection();
             });
 
-            peer.on('error', (err) => { statusMsg.innerText = '방을 찾을 수 없거나 연결 실패.'; });
+            peer.on('error', (err) => { 
+                console.error("PeerJS 조인 에러:", err);
+                statusMsg.innerText = '방을 찾을 수 없거나 연결 실패. (오류: ' + (err.type || err) + ')'; 
+            });
         }
 
         // 창 닫을 때 방 목록에서 자동 제거
